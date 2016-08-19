@@ -58,12 +58,13 @@ class TestOplogManager(unittest.TestCase):
         self.repl_set.stop()
 
     def test_get_oplog_cursor(self):
-        '''Test the get_oplog_cursor method'''
+        """Test the get_oplog_cursor method"""
 
-        # timestamp is None - all oplog entries are returned.
+        # timestamp is None - all oplog entries excluding no-ops are returned.
         cursor = self.opman.get_oplog_cursor(None)
         self.assertEqual(cursor.count(),
-                         self.primary_conn["local"]["oplog.rs"].count())
+                         self.primary_conn["local"]["oplog.rs"].find(
+                             {'op': {'$ne': 'n'}}).count())
 
         # earliest entry is the only one at/after timestamp
         doc = {"ts": bson.Timestamp(1000, 0), "i": 1}
@@ -133,6 +134,33 @@ class TestOplogManager(unittest.TestCase):
         last_ts = self.opman.get_last_oplog_timestamp()
         self.assertEqual(last_ts, self.opman.dump_collection())
         self.assertEqual(len(self.opman.doc_managers[0]._search()), 1000)
+
+    def test_dump_collection_with_namespace_set_not_in_oplog(self):
+        """Test the dump_collection method works with namespace-set.
+
+        Cases:
+        1. non-empty oplog, specified a namespace-set, none of the oplog
+        entries are for collections in the namespace-set.
+        """
+        # 1MB oplog so that we can rollover quickly
+        repl_set = ReplicaSet(oplogSize=1).start()
+        conn = repl_set.client()
+        opman = OplogThread(
+            primary_client=conn,
+            doc_managers=(DocManager(),),
+            oplog_progress_dict=LockingDict(),
+            ns_set={"test.test"}
+        )
+        # insert a document into a ns_set collection
+        conn["test"]["test"].insert_one({"test": 1})
+        # Cause the oplog to rollover on a non-ns_set collection
+        for i in range(1024):
+            conn["test"]["ignored"].insert_one({"test": "1" * 1024})
+        self.assertIsNone(
+            conn["local"]["oplog.rs"].find_one({"ns": "test.test"}))
+        last_ts = opman.get_last_oplog_timestamp()
+        self.assertEqual(last_ts, opman.dump_collection())
+        self.assertEqual(len(opman.doc_managers[0]._search()), 1)
 
     def test_dump_collection_with_error(self):
         """Test the dump_collection method with invalid documents.
