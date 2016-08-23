@@ -641,10 +641,10 @@ class OplogThread(threading.Thread):
 
         return timestamp
 
-    def _get_oplog_timestamp(self, oldest_entry):
+    def _get_oplog_timestamp(self, newest_entry):
         """Return the timestamp of the latest or earliest entry in the oplog.
         """
-        sort_order = pymongo.DESCENDING if oldest_entry else pymongo.ASCENDING
+        sort_order = pymongo.DESCENDING if newest_entry else pymongo.ASCENDING
         curr = self.oplog.find({'op': {'$ne': 'n'}}).sort(
             '$natural', sort_order
         ).limit(-1)
@@ -656,7 +656,7 @@ class OplogThread(threading.Thread):
             return None
 
         LOG.debug("OplogThread: %s oplog entry has timestamp %d."
-                  % ('Last' if oldest_entry else 'First', ts.time))
+                  % ('Newest' if newest_entry else 'Oldest', ts.time))
         return ts
 
     def get_oldest_oplog_timestamp(self):
@@ -733,10 +733,14 @@ class OplogThread(threading.Thread):
 
             cursor_ts_long = util.bson_ts_to_long(first_oplog_entry["ts"])
             if cursor_ts_long > checkpoint_ts_long:
-                # the checkpoint is not present in this oplog
+                # The checkpoint is not present in this oplog and the oplog
+                # did not rollover. This means that we connected to a new
+                # primary which did not replicate the checkpoint and which has
+                # new changes in its oplog for us to process.
                 # rollback, update checkpoint, and retry
                 LOG.debug("OplogThread: Initiating rollback from "
-                          "get_oplog_cursor")
+                          "get_oplog_cursor: new oplog entries found but "
+                          "checkpoint is not present")
                 self.checkpoint = self.rollback()
                 self.update_checkpoint()
                 return self.init_cursor()
