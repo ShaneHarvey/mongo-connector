@@ -24,8 +24,8 @@ import pymongo
 from mongo_connector import errors
 from mongo_connector.command_helper import CommandHelper
 from mongo_connector.doc_managers.doc_manager_base import DocManagerBase
-from mongo_connector.locking_dict import LockingDict
 from mongo_connector.oplog_manager import OplogThread
+from mongo_connector.oplog_progress import OplogProgress
 from mongo_connector.test_utils import ReplicaSet, assert_soon, close_client
 from tests import unittest
 
@@ -54,7 +54,7 @@ class TestCommandReplication(unittest.TestCase):
     def setUp(self):
         self.repl_set = ReplicaSet().start()
         self.primary_conn = self.repl_set.client()
-        self.oplog_progress = LockingDict()
+        self.oplog_progress = OplogProgress()
         self.opman = None
 
     def tearDown(self):
@@ -72,7 +72,7 @@ class TestCommandReplication(unittest.TestCase):
         self.opman = OplogThread(
             primary_client=self.primary_conn,
             doc_managers=(self.docman,),
-            oplog_progress_dict=self.oplog_progress,
+            oplog_progress=self.oplog_progress,
             ns_set=namespace_set,
             dest_mapping=dest_mapping,
             collection_dump=False

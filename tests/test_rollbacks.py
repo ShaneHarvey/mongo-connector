@@ -27,8 +27,8 @@ from pymongo.write_concern import WriteConcern
 sys.path[0:0] = [""]
 
 from mongo_connector.doc_managers.doc_manager_simulator import DocManager
-from mongo_connector.locking_dict import LockingDict
 from mongo_connector.oplog_manager import OplogThread
+from mongo_connector.oplog_progress import OplogProgress
 from mongo_connector.test_utils import (ReplicaSet,
                                         STRESS_COUNT,
                                         assert_soon,
@@ -67,11 +67,11 @@ class TestRollbacks(unittest.TestCase):
 
         # Oplog thread
         doc_manager = DocManager()
-        oplog_progress = LockingDict()
+        oplog_progress = OplogProgress()
         self.opman = OplogThread(
             primary_client=self.main_conn,
             doc_managers=(doc_manager,),
-            oplog_progress_dict=oplog_progress,
+            oplog_progress=oplog_progress,
             ns_set=["test.mc"]
         )
 

@@ -43,7 +43,7 @@ class OplogThread(threading.Thread):
     Calls the appropriate method on DocManagers for each relevant oplog entry.
     """
     def __init__(self, primary_client, doc_managers,
-                 oplog_progress_dict, mongos_client=None, **kwargs):
+                 oplog_progress, mongos_client=None, **kwargs):
         super(OplogThread, self).__init__()
 
         self.batch_size = kwargs.get('batch_size', DEFAULT_BATCH_SIZE)
@@ -67,9 +67,8 @@ class OplogThread(threading.Thread):
         # Stores the timestamp of the last oplog entry read.
         self.checkpoint = None
 
-        # A dictionary that stores OplogThread/timestamp pairs.
-        # Represents the last checkpoint for a OplogThread.
-        self.oplog_progress = oplog_progress_dict
+        # An OplogProgress instance shared among all OplogThreads
+        self.oplog_progress = oplog_progress
 
         # The set of namespaces to process from the mongo cluster.
         self.namespace_set = kwargs.get('ns_set', [])
@@ -684,7 +683,7 @@ class OplogThread(threading.Thread):
 
         Returns the cursor and True if the cursor is empty.
         """
-        timestamp = self.read_last_checkpoint()
+        timestamp = self.read_checkpoint()
 
         if timestamp is None:
             if self.collection_dump:
@@ -755,46 +754,14 @@ class OplogThread(threading.Thread):
     def update_checkpoint(self):
         """Store the current checkpoint in the oplog progress dictionary.
         """
-        if self.checkpoint is not None:
-            with self.oplog_progress as oplog_prog:
-                oplog_dict = oplog_prog.get_dict()
-                # If we have the repr of our oplog collection in the dictionary,
-                # remove it and replace it with our replica set name.
-                # This allows an easy upgrade path from mongo-connector 2.3.
-                # For an explanation of the format change, see the comment in
-                # read_last_checkpoint.
-                oplog_dict.pop(str(self.oplog), None)
-                oplog_dict[self.replset_name] = self.checkpoint
-                LOG.debug("OplogThread: oplog checkpoint updated to %s" %
-                          str(self.checkpoint))
-        else:
-            LOG.debug("OplogThread: no checkpoint to update.")
+        self.oplog_progress.update_checkpoint(
+            self.oplog, self.replset_name, self.checkpoint)
 
-    def read_last_checkpoint(self):
+    def read_checkpoint(self):
         """Read the last checkpoint from the oplog progress dictionary.
         """
-        # In versions of mongo-connector 2.3 and before, we used the repr of the
-        # oplog collection as keys in the oplog_progress dictionary.
-        # In versions thereafter, we use the replica set name. For backwards
-        # compatibility, we check for both.
-        oplog_str = str(self.oplog)
-
-        ret_val = None
-        with self.oplog_progress as oplog_prog:
-            oplog_dict = oplog_prog.get_dict()
-            try:
-                # New format.
-                ret_val = oplog_dict[self.replset_name]
-            except KeyError:
-                try:
-                    # Old format.
-                    ret_val = oplog_dict[oplog_str]
-                except KeyError:
-                    pass
-
-        LOG.debug("OplogThread: reading last checkpoint as %s " %
-                  str(ret_val))
-        return ret_val
+        return self.oplog_progress.read_checkpoint(
+            self.oplog, self.replset_name)
 
     def rollback(self):
         """Rollback target system to consistent state.

@@ -26,8 +26,8 @@ import pymongo
 sys.path[0:0] = [""]
 
 from mongo_connector.doc_managers.doc_manager_simulator import DocManager
-from mongo_connector.locking_dict import LockingDict
 from mongo_connector.oplog_manager import OplogThread
+from mongo_connector.oplog_progress import OplogProgress
 from mongo_connector.test_utils import ReplicaSet, assert_soon, close_client
 from mongo_connector.util import bson_ts_to_long
 from tests import unittest
@@ -45,7 +45,7 @@ class TestOplogManager(unittest.TestCase):
         self.opman = OplogThread(
             primary_client=self.primary_conn,
             doc_managers=(DocManager(),),
-            oplog_progress_dict=LockingDict()
+            oplog_progress=OplogProgress()
         )
 
     def tearDown(self):
@@ -144,7 +144,7 @@ class TestOplogManager(unittest.TestCase):
         opman = OplogThread(
             primary_client=conn,
             doc_managers=(DocManager(),),
-            oplog_progress_dict=LockingDict(),
+            oplog_progress=OplogProgress(),
             ns_set=set(["test.test"])
         )
         # Insert a document into a ns_set collection
@@ -227,12 +227,11 @@ class TestOplogManager(unittest.TestCase):
         cursor, cursor_empty = self.opman.init_cursor()
         self.assertFalse(cursor_empty)
         self.assertEqual(self.opman.checkpoint, last_ts)
-        with self.opman.oplog_progress as prog:
-            self.assertEqual(prog.get_dict()[self.opman.replset_name],
-                             last_ts)
+        self.assertEqual(
+            self.opman.oplog_progress.dict[self.opman.replset_name], last_ts)
 
         # No last checkpoint, no collection dump, something in oplog
-        self.opman.oplog_progress = LockingDict()
+        self.opman.oplog_progress = OplogProgress()
         self.opman.collection_dump = False
         collection.insert_one({"i": 2})
         last_ts = self.opman.get_last_oplog_timestamp()
@@ -243,25 +242,25 @@ class TestOplogManager(unittest.TestCase):
         self.assertEqual(self.opman.checkpoint, last_ts)
 
         # Last checkpoint exists
-        progress = LockingDict()
+        progress = OplogProgress()
         self.opman.oplog_progress = progress
         for i in range(1000):
             collection.insert_one({"i": i + 500})
         entry = list(
             self.primary_conn["local"]["oplog.rs"].find(skip=200, limit=-2))
-        progress.get_dict()[self.opman.replset_name] = entry[0]["ts"]
+        progress.dict[self.opman.replset_name] = entry[0]["ts"]
         self.opman.oplog_progress = progress
         self.opman.checkpoint = None
         cursor, cursor_empty = self.opman.init_cursor()
         self.assertEqual(next(cursor)["ts"], entry[1]["ts"])
         self.assertEqual(self.opman.checkpoint, entry[0]["ts"])
-        with self.opman.oplog_progress as prog:
-            self.assertEqual(prog.get_dict()[self.opman.replset_name],
-                             entry[0]["ts"])
+        self.assertEqual(
+            self.opman.oplog_progress.dict[self.opman.replset_name],
+            entry[0]["ts"])
 
         # Last checkpoint is behind
-        progress = LockingDict()
-        progress.get_dict()[self.opman.replset_name] = bson.Timestamp(1, 0)
+        progress = OplogProgress()
+        progress.dict[self.opman.replset_name] = bson.Timestamp(1, 0)
         self.opman.oplog_progress = progress
         self.opman.checkpoint = None
         cursor, cursor_empty = self.opman.init_cursor()
@@ -383,7 +382,7 @@ class TestOplogManager(unittest.TestCase):
         # Old format oplog progress file:
         progress = {str(self.opman.oplog): bson_ts_to_long(first_oplog_ts)}
         # Set up oplog managers to use the old format.
-        oplog_progress = LockingDict()
+        oplog_progress = OplogProgress()
         oplog_progress.dict = progress
         self.opman.oplog_progress = oplog_progress
         # Cause the oplog managers to update their checkpoints.
@@ -393,7 +392,7 @@ class TestOplogManager(unittest.TestCase):
         new_format = {self.opman.replset_name: first_oplog_ts}
         self.assertEqual(
             new_format,
-            self.opman.oplog_progress.get_dict()
+            self.opman.oplog_progress.dict
         )
 
 
