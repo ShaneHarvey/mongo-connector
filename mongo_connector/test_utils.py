@@ -89,7 +89,7 @@ class MCTestObject(object):
             _mo_url(self._resource), timeout=None, json=config)
         if not ret.ok:
             raise RuntimeError(
-                "Error sending POST to cluster: %s" % (ret.content,))
+                "Error sending POST to cluster: %s" % (ret.text,))
 
         ret = ret.json()
         if type(ret) == list:  # Will return a list if an error occurred.

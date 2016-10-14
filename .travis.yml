@@ -3,18 +3,22 @@ python:
   - 2.6
   - 2.7
   - 3.3
-  - 3.4
   - 3.5
+
+env:
+  matrix:
+    - MONGODB=2.4.14
+    - MONGODB=2.6.12
+    - MONGODB=3.0.12
+    - MONGODB=3.2.10
+    - MONGODB=3.4.0-rc0
 
 install:
   - pip install pymongo==2.9
   - pip install "mongo-orchestration>=0.6,<1.0"
-  - wget http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1204-3.4.0-rc0.tgz
-  - tar zxf mongodb-linux-x86_64-ubuntu1204-3.4.0-rc0.tgz
-  - which mongod
-  - mongod --version
-  - sudo cp mongodb-linux-x86_64-ubuntu1204-3.4.0-rc0/bin/* /usr/bin/
-  - which mongod
+  - wget http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-${MONGODB}.tgz
+  - tar zxf mongodb-linux-x86_64-${MONGODB}.tgz
+  - sudo cp mongodb-linux-x86_64-${MONGODB}/bin/* /usr/bin/
   - mongod --version
 
 before_script:
