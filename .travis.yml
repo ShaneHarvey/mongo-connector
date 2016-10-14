@@ -32,6 +32,7 @@ before_script:
   - mongo-orchestration start -p 20000
 
 script:
+  - curl ${MO_ADDRESS}
   - pip install .
   - pip install requests
   - python launch.py
