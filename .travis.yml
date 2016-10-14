@@ -1,4 +1,4 @@
-sudo: required
+sudo: false
 language: python
 python:
   - 2.6
@@ -11,11 +11,11 @@ env:
     - MO_ADDRESS=localhost:20000
     - MONGO_ORCHESTRATION_HOME=$PWD
   matrix:
-    - MONGODB=2.4.14
-    - MONGODB=2.6.12
-    - MONGODB=3.0.12
+    #- MONGODB=2.4.14
+    #- MONGODB=2.6.12
+    #- MONGODB=3.0.12
     - MONGODB=3.2.10
-    - MONGODB=3.4.0-rc0
+    #- MONGODB=3.4.0-rc0
 
 matrix:
   fast_finish: true
