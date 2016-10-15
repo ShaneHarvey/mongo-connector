@@ -9,7 +9,6 @@ python:
 env:
   global:
     - MO_ADDRESS=127.0.0.1:20000
-    - MONGO_ORCHESTRATION_HOME=$PWD
   matrix:
     - MONGODB=2.4.14
     - MONGODB=2.6.12
@@ -31,10 +30,7 @@ before_script:
   - mongo-orchestration start -p 20000 -b 127.0.0.1
 
 script:
-  - pip install .
-  - pip install requests
-  - python launch.py
+  - python setup.py test
 
 after_script:
   - mongo-orchestration stop
-  - cat ${MONGO_ORCHESTRATION_HOME}/server.log
