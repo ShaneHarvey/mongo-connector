@@ -11,17 +11,17 @@ env:
     - MO_ADDRESS=127.0.0.1:20000
     - MONGO_ORCHESTRATION_HOME=$PWD
   matrix:
-    #- MONGODB=2.4.14
-    #- MONGODB=2.6.12
-    #- MONGODB=3.0.12
+    - MONGODB=2.4.14
+    - MONGODB=2.6.12
+    - MONGODB=3.0.12
     - MONGODB=3.2.10
-    #- MONGODB=3.4.0-rc0
+    - MONGODB=3.4.0-rc0
 
 matrix:
   fast_finish: true
 
 install:
-  - pip install "mongo-orchestration>=0.6,<1.0"
+  - pip install https://github.com/shaneharvey/mongo-orchestration/archive/fix-python3-map.zip
   - wget http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-${MONGODB}.tgz
   - tar zxf mongodb-linux-x86_64-${MONGODB}.tgz
   - export PATH=${PWD}/mongodb-linux-x86_64-${MONGODB}/bin/:${PATH}
