@@ -17,6 +17,7 @@
 import sys
 
 from bson import timestamp
+from pymongo import errors
 
 sys.path[0:0] = [""]
 
@@ -34,7 +35,7 @@ def err_func():
     if err_func.counter == 3:
         return True
     else:
-        raise TypeError
+        raise errors.ConnectionFailure
 
 err_func.counter = 0
 

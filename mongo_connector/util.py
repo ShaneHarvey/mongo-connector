@@ -20,6 +20,8 @@ import sys
 import time
 
 from bson.timestamp import Timestamp
+from pymongo import errors
+
 from mongo_connector.compat import reraise
 
 LOG = logging.getLogger(__name__)
@@ -75,7 +77,7 @@ def retry_until_ok(func, *args, **kwargs):
     while True:
         try:
             return func(*args, **kwargs)
-        except Exception:
+        except errors.PyMongoError:
             count += 1
             if count > 120:
                 LOG.exception('Call to %s failed too many times in '
