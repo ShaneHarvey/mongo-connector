@@ -15,6 +15,9 @@
 import logging
 import threading
 import re
+
+from collections import namedtuple
+
 from mongo_connector import errors
 
 
@@ -25,8 +28,20 @@ wildcard mapping namespaces dynamically.
 """
 
 
-class DestMapping():
-    def __init__(self, namespace_set, ex_namespace_set, user_mapping):
+_MappedNamespace = namedtuple('MappedNamespace',
+                              ['name', 'include_fields', 'exclude_fields'])
+
+
+class MappedNamespace(_MappedNamespace):
+    def __new__(cls, name=None, include_fields=None, exclude_fields=None):
+        return super(MappedNamespace, cls).__new__(
+            cls, name, include_fields, exclude_fields)
+
+
+class DestMapping(object):
+    def __init__(self, namespace_set=None, ex_namespace_set=None,
+                 user_mapping=None, include_fields=None,
+                 exclude_fields=None):
         """
             namespace_set and ex_namespace_set will not be non-empty
             in the same time.
@@ -45,40 +60,76 @@ class DestMapping():
         # a dict containing plain db mappings, db -> a set of mapped db
         self.plain_db = {}
 
+        # Fields to include or exclude from all namespaces
+        self.include_fields = include_fields
+        self.exclude_fields = exclude_fields
+
         # the input namespace_set and ex_namespace_set could contain wildcard
-        self.namespace_set = namespace_set
-        self.ex_namespace_set = ex_namespace_set
+        self.namespace_set = set()
+        if ex_namespace_set:
+            self.ex_namespace_set = set(ex_namespace_set)
+        else:
+            self.ex_namespace_set = set()
 
         self.lock = threading.Lock()
 
+        user_mapping = user_mapping or {}
+        namespace_set = namespace_set or []
         # initialize
         for ns in namespace_set:
             user_mapping.setdefault(ns, ns)
 
-        for k, v in user_mapping.items():
-            self.set(k, v)
-
-    def set_plain(self, key, value):
-        """A utility function to set the corresponding plain variables"""
-        if value in self.reverse_plain:
-            raise errors.InvalidConfiguration(
-                "Destination namespaces set should not"
-                " contain any duplicates.")
-
-        db, col = key.split(".", 1)
-        self.plain[key] = value
-        self.reverse_plain[value] = key
-        if col != "$cmd":
-            if db not in self.plain_db:
-                self.plain_db[db] = set([value.split(".")[0]])
+        for src_name, v in user_mapping.items():
+            if isinstance(v, dict):
+                self._add_mapping(src_name, v.get('rename'), v.get('fields'),
+                                  v.get('excludeFields'))
             else:
-                self.plain_db[db].add(value.split(".")[0])
+                self._add_mapping(src_name, v)
 
-    def match(self, src, dst_pattern):
+    def _add_mapping(self, src_name, dest_name=None, include_fields=None,
+                     exclude_fields=None):
+        if (self.include_fields and exclude_fields or
+                self.exclude_fields and include_fields or
+                include_fields and exclude_fields):
+            raise errors.InvalidConfiguration(
+                "Cannot mix include fields and exclude fields in "
+                "namespace mapping for: '%s'" % (src_name,))
+        if dest_name is None:
+            dest_name = src_name
+        self.set(src_name, MappedNamespace(dest_name, include_fields,
+                                           exclude_fields))
+        # Add the namespace for commands on this database
+        cmd_name = src_name.split('.', 1)[0] + '.$cmd'
+        dest_cmd_name = dest_name.split('.', 1)[0] + '.$cmd'
+        self.set(cmd_name, MappedNamespace(dest_cmd_name))
+
+    def set_plain(self, src_name, mapped_namespace):
+        """A utility function to set the corresponding plain variables"""
+        target_name = mapped_namespace.name
+        existing_src = self.reverse_plain.get(target_name)
+        if existing_src and existing_src != src_name:
+            raise errors.InvalidConfiguration(
+                "Multiple namespaces cannot be combined into one target "
+                "namespace. Trying to map '%s' to '%s' but there already "
+                "exists a mapping from '%s' to '%s'" %
+                (src_name, target_name, existing_src, target_name))
+
+        self.plain[src_name] = mapped_namespace
+        self.reverse_plain[target_name] = src_name
+        src_db, src_col = src_name.split(".", 1)
+        if src_col != "$cmd":
+            target_db = target_name.split(".")[0]
+            self.plain_db.setdefault(src_db, set()).add(target_db)
+
+    def match(self, src, wildcard_ns):
         """If source string src matches dst, return the matchobject"""
-        reg_pattern = r'\A' + dst_pattern.replace('*', '(.*)') + r'\Z'
-        m = re.match(reg_pattern, src)
-        return m
+        if wildcard_ns.find('*') < wildcard_ns.find('.'):
+            # A database name cannot contain a '.' character
+            wildcard_group = '([^.]*)'
+        else:
+            wildcard_group = '(.*)'
+        reg_pattern = r'\A' + wildcard_ns.replace('*', wildcard_group) + r'\Z'
+        return re.match(reg_pattern, src)
 
     def match_set(self, plain_src, dst_arr):
         for x in dst_arr:
@@ -97,10 +148,16 @@ class DestMapping():
         wildcard_matched = src_match.group(1)
         return map_pattern.replace("*", wildcard_matched)
 
-    def get(self, plain_src_ns, defaultval=""):
-        """Given a plain source namespace, return a mapped namespace if matched.
-        If no match and given defaultval, return it as a default value.
+    def get(self, plain_src_ns):
+        """Given a plain source namespace, return a mapped namespace if it
+        should be included or None.
         """
+        # if plain_src_ns matches ex_namespace_set, ignore
+        if self.match_set(plain_src_ns, self.ex_namespace_set):
+            return None
+        if not self.wildcard and not self.plain:
+            # here we include all namespaces
+            return MappedNamespace(plain_src_ns)
         with self.lock:
             # search in plain mappings first
             try:
@@ -109,49 +166,56 @@ class DestMapping():
                 # search in wildcard mappings
                 # if matched, get a replaced mapped namespace
                 # and add to the plain mappings
-                for k, v in self.wildcard.items():
-                    m_res = self.match(plain_src_ns, k)
-                    if m_res:
-                        res = self.replace(m_res, v)
-                        if res is not None:
-                            self.set_plain(plain_src_ns, res)
-                            return res
+                for wildcard_name, mapped in self.wildcard.items():
+                    match = self.match(plain_src_ns, wildcard_name)
+                    if not match:
+                        continue
+                    new_name = self.replace(match, mapped.name)
+                    new_mapped = MappedNamespace(new_name,
+                                                 mapped.include_fields,
+                                                 mapped.exclude_fields)
+                    self.set_plain(plain_src_ns, new_mapped)
+                    return new_mapped
 
-            if defaultval:
-                return defaultval
-            else:
-                LOG.warn("Failed to find matched mapping "
-                         "for %s." % plain_src_ns)
-                return None
+            return None
 
-    def set(self, key, value):
-        """Set the DestMapping instance to corresponding dictionary"""
+    def set(self, src_name, mapped_namespace):
+        """Add a new namespace mapping."""
         with self.lock:
-            if "*" in key:
-                self.wildcard[key] = value
+            if "*" in src_name:
+                self.wildcard[src_name] = mapped_namespace
             else:
-                self.set_plain(key, value)
+                self.set_plain(src_name, mapped_namespace)
+        self.namespace_set.add(src_name)
 
-    def get_key(self, plain_mapped_ns):
+    def unmap_namespace(self, plain_mapped_ns):
         """Given a plain mapped namespace, return a source namespace if
-        matched. Only need to consider plain mappings since this is only
-        called in rollback and all the rollback namespaces in the target
-        system should already been put in the reverse_plain dictionary.
+        matched. It is possible for the mapped namespace to not yet be present
+        in the plain/reverse_plain dictionaries so we search the wildcard
+        dictionary as well.
         """
-        return self.reverse_plain.get(plain_mapped_ns)
+        if not self.wildcard and not self.plain:
+            return plain_mapped_ns
+
+        src_name = self.reverse_plain.get(plain_mapped_ns)
+        if src_name:
+            return src_name
+        for wildcard_src_name, mapped in self.wildcard.items():
+            match = self.match(plain_mapped_ns, mapped.name)
+            if not match:
+                continue
+            return self.replace(match, wildcard_src_name)
+        return None
 
     def map_namespace(self, plain_src_ns):
         """Applies the plain source namespace mapping to a "db.collection" string.
         The input parameter ns is plain text.
         """
-        # if plain_src_ns matches ex_namespace_set, ignore
-        if self.match_set(plain_src_ns, self.ex_namespace_set):
-            return None
-        # if no namespace_set, no renaming
-        if not self.namespace_set:
-            return self.get(plain_src_ns, defaultval=plain_src_ns)
+        mapped = self.get(plain_src_ns)
+        if mapped:
+            return mapped.name
         else:
-            return self.get(plain_src_ns)
+            return None
 
     def map_db(self, plain_src_db):
         """Applies the namespace mapping to a database.
@@ -162,8 +226,28 @@ class DestMapping():
         databases should exist and already been put to plain_db when doing
         create/insert operation.
         """
-
-        if self.plain_db:
-            return list(self.plain_db.get(plain_src_db, set([])))
-        else:
+        if not self.wildcard and not self.plain:
             return [plain_src_db]
+        # Lookup this namespace to seed the plain_db dictionary
+        self.get(plain_src_db + '.$cmd')
+        return list(self.plain_db.get(plain_src_db, set()))
+
+    def fields(self, plain_src_ns):
+        """Get the fields to include and exclude for a given namespace."""
+        mapped = self.get(plain_src_ns)
+        if mapped:
+            return mapped.include_fields, mapped.exclude_fields
+        else:
+            return None, None
+
+    def projection(self, plain_src_name, projection):
+        """For the given source namespace return the projected fields."""
+        include_fields, exclude_fields = self.fields(plain_src_name)
+        fields = include_fields or exclude_fields
+        include = 1 if include_fields else 0
+        if fields:
+            full_projection = dict((field, include) for field in fields)
+            if projection:
+                full_projection.update(projection)
+            return full_projection
+        return projection
