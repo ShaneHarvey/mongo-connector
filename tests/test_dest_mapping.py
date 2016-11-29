@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 from tests import unittest
-from mongo_connector.dest_mapping import DestMapping, MappedNamespace
+from mongo_connector.dest_mapping import (
+    DestMapping, MappedNamespace, match_replace_regex, namespace_to_regex,
+    RegexSet)
 from mongo_connector import errors
 
 
 class TestDestMapping(unittest.TestCase):
+    """Test the DestMapping class"""
 
     def test_default(self):
         """Test that by default, all namespaces are kept without renaming"""
@@ -120,6 +125,60 @@ class TestDestMapping(unittest.TestCase):
             DestMapping(exclude_fields=["b"], user_mapping={
                 "db.col": {"fields": ["a"]}})
 
+    def test_match_replace_regex(self):
+        """Test regex matching and replacing."""
+        regex = re.compile(r"\Adb_([^.]*).foo\Z")
+        self.assertIsNone(match_replace_regex(regex, "db.foo", "*.foo"))
+        self.assertIsNone(match_replace_regex(regex, "db.foo.foo", "*.foo"))
+        self.assertEqual(match_replace_regex(regex, "db_bar.foo", "*.foo"),
+                         "bar.foo")
+
+    def test_namespace_to_regex(self):
+        """Test regex creation."""
+        self.assertEqual(namespace_to_regex("db_*.foo"),
+                         re.compile(r"\Adb_([^.]*).foo\Z"))
+        self.assertEqual(namespace_to_regex("db.foo*"),
+                         re.compile(r"\Adb.foo(.*)\Z"))
+        self.assertEqual(namespace_to_regex("db.foo"),
+                         re.compile(r"\Adb.foo\Z"))
+
+
+class TestRegexSet(unittest.TestCase):
+    """Test the RegexSet class."""
+
+    def test_from_namespaces(self):
+        """Test construction from list of namespaces."""
+        self.assertEqual(RegexSet.from_namespaces([]),
+                         RegexSet([], []))
+        self.assertEqual(RegexSet.from_namespaces(["db.bar", "db_*.foo",
+                                                   "db2.*"]),
+                         RegexSet([namespace_to_regex("db_*.foo"),
+                                   namespace_to_regex("db2.*")],
+                                  ["db.bar"]))
+
+    def test_contains(self):
+        """Test membership query."""
+        regex_set = RegexSet.from_namespaces(["db.bar", "db_*.foo", "db2.*"])
+        self.assertTrue("db.bar" in regex_set)
+        self.assertTrue("db_1.foo" in regex_set)
+        self.assertTrue("db2.bar" in regex_set)
+        self.assertTrue("db2.bar2" in regex_set)
+        self.assertFalse("not.found" in regex_set)
+        self.assertFalse("db_not.found" in regex_set)
+
+    def test_add(self):
+        """Test adding a new string."""
+        regex_set = RegexSet.from_namespaces([])
+        self.assertFalse("string.found" in regex_set)
+        regex_set.add("string.found")
+        self.assertTrue("string.found" in regex_set)
+
+    def test_discard(self):
+        """Test discarding a string."""
+        regex_set = RegexSet.from_namespaces(["db.bar"])
+        self.assertTrue("db.bar" in regex_set)
+        regex_set.discard("db.bar")
+        self.assertFalse("db.bar" in regex_set)
 
 if __name__ == "__main__":
     unittest.main()

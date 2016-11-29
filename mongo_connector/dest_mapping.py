@@ -16,16 +16,12 @@ import logging
 import threading
 import re
 
-from collections import namedtuple
+from collections import namedtuple, MutableSet
 
 from mongo_connector import errors
 
 
 LOG = logging.getLogger(__name__)
-
-"""New structure to handle both plain and
-wildcard mapping namespaces dynamically.
-"""
 
 
 _MappedNamespace = namedtuple('MappedNamespace',
@@ -38,21 +34,69 @@ class MappedNamespace(_MappedNamespace):
             cls, name, include_fields, exclude_fields)
 
 
+class RegexSet(MutableSet):
+    """Set that stores both plain strings and RegexObjects.
+
+    Membership query results are cached so that repeated lookups of the same
+    string are fast.
+    """
+    def __init__(self, regexes, strings):
+        self._regexes = set(regexes)
+        self._plain = set(strings)
+        self._not_found_cache = set()
+
+    def __contains__(self, item):
+        if item in self._not_found_cache:
+            return False
+        if item in self._plain:
+            return True
+        if item in self._regexes:
+            return True
+        for regex in self._regexes:
+            if regex.match(item):
+                self._plain.add(item)
+                return True
+        self._not_found_cache.add(item)
+        return False
+
+    def __iter__(self):
+        for regex in self._regexes:
+            yield regex
+        for string in self._plain:
+            yield string
+
+    def __len__(self):
+        return len(self._regexes) + len(self._plain)
+
+    def add(self, string):
+        self._plain.add(string)
+        self._not_found_cache.discard(string)
+
+    def discard(self, string):
+        self._plain.discard(string)
+
+    @staticmethod
+    def from_namespaces(namespaces):
+        regexes = set()
+        strings = set()
+        for ns in namespaces:
+            if '*' in ns:
+                regexes.add(namespace_to_regex(ns))
+            else:
+                strings.add(ns)
+        return RegexSet(regexes, strings)
+
+
 class DestMapping(object):
+    """Manages included and excluded namespaces.
+    """
     def __init__(self, namespace_set=None, ex_namespace_set=None,
                  user_mapping=None, include_fields=None,
                  exclude_fields=None):
-        """
-            namespace_set and ex_namespace_set will not be non-empty
-            in the same time.
-            user_mapping should be non-empty together with namespace_set.
-            This assumption has been verified in the get_config_options()
-            in connector.py.
-        """
         # a dict containing plain mappings
         self.plain = {}
-        # a dict containing wildcard mappings
-        self.wildcard = {}
+        # a list of (RegexObject, original namespace, MappedNamespace) tuples
+        self.regex_map = []
         # a dict containing reverse plain mapping
         # because the mappings are not duplicated,
         # so the values should also be unique
@@ -66,10 +110,8 @@ class DestMapping(object):
 
         # the input namespace_set and ex_namespace_set could contain wildcard
         self.namespace_set = set()
-        if ex_namespace_set:
-            self.ex_namespace_set = set(ex_namespace_set)
-        else:
-            self.ex_namespace_set = set()
+        self.ex_namespace_set = RegexSet.from_namespaces(
+            ex_namespace_set or [])
 
         self.lock = threading.Lock()
 
@@ -105,87 +147,62 @@ class DestMapping(object):
 
     def set_plain(self, src_name, mapped_namespace):
         """A utility function to set the corresponding plain variables"""
-        target_name = mapped_namespace.name
-        existing_src = self.reverse_plain.get(target_name)
-        if existing_src and existing_src != src_name:
-            raise errors.InvalidConfiguration(
-                "Multiple namespaces cannot be combined into one target "
-                "namespace. Trying to map '%s' to '%s' but there already "
-                "exists a mapping from '%s' to '%s'" %
-                (src_name, target_name, existing_src, target_name))
+        # The lock is necessary to properly check that multiple namespaces
+        # into a single namespace.
+        with self.lock:
+            target_name = mapped_namespace.name
+            existing_src = self.reverse_plain.get(target_name)
+            if existing_src and existing_src != src_name:
+                raise errors.InvalidConfiguration(
+                    "Multiple namespaces cannot be combined into one target "
+                    "namespace. Trying to map '%s' to '%s' but there already "
+                    "exists a mapping from '%s' to '%s'" %
+                    (src_name, target_name, existing_src, target_name))
 
-        self.plain[src_name] = mapped_namespace
-        self.reverse_plain[target_name] = src_name
-        src_db, src_col = src_name.split(".", 1)
-        if src_col != "$cmd":
-            target_db = target_name.split(".")[0]
+            self.plain[src_name] = mapped_namespace
+            self.reverse_plain[target_name] = src_name
+            src_db, _ = src_name.split(".", 1)
+            target_db, _ = target_name.split(".", 1)
             self.plain_db.setdefault(src_db, set()).add(target_db)
-
-    def match(self, src, wildcard_ns):
-        """If source string src matches dst, return the matchobject"""
-        if wildcard_ns.find('*') < wildcard_ns.find('.'):
-            # A database name cannot contain a '.' character
-            wildcard_group = '([^.]*)'
-        else:
-            wildcard_group = '(.*)'
-        reg_pattern = r'\A' + wildcard_ns.replace('*', wildcard_group) + r'\Z'
-        return re.match(reg_pattern, src)
-
-    def match_set(self, plain_src, dst_arr):
-        for x in dst_arr:
-            if plain_src == x:
-                return True
-            if "*" in x:
-                m = self.match(plain_src, x)
-                if m:
-                    return True
-
-        return False
-
-    def replace(self, src_match, map_pattern):
-        """Given the matchobject src_match,
-        replace corresponding '*' in map_pattern with src_match."""
-        wildcard_matched = src_match.group(1)
-        return map_pattern.replace("*", wildcard_matched)
 
     def get(self, plain_src_ns):
         """Given a plain source namespace, return a mapped namespace if it
         should be included or None.
         """
         # if plain_src_ns matches ex_namespace_set, ignore
-        if self.match_set(plain_src_ns, self.ex_namespace_set):
+        if plain_src_ns in self.ex_namespace_set:
             return None
-        if not self.wildcard and not self.plain:
+        if not self.regex_map and not self.plain:
             # here we include all namespaces
             return MappedNamespace(plain_src_ns)
-        with self.lock:
-            # search in plain mappings first
-            try:
-                return self.plain[plain_src_ns]
-            except KeyError:
-                # search in wildcard mappings
-                # if matched, get a replaced mapped namespace
-                # and add to the plain mappings
-                for wildcard_name, mapped in self.wildcard.items():
-                    match = self.match(plain_src_ns, wildcard_name)
-                    if not match:
-                        continue
-                    new_name = self.replace(match, mapped.name)
-                    new_mapped = MappedNamespace(new_name,
-                                                 mapped.include_fields,
-                                                 mapped.exclude_fields)
-                    self.set_plain(plain_src_ns, new_mapped)
-                    return new_mapped
+        # search in plain mappings first
+        try:
+            return self.plain[plain_src_ns]
+        except KeyError:
+            # search in wildcard mappings
+            # if matched, get a replaced mapped namespace
+            # and add to the plain mappings
+            for regex, _, mapped in self.regex_map:
+                new_name = match_replace_regex(regex, plain_src_ns,
+                                               mapped.name)
+                if not new_name:
+                    continue
+                new_mapped = MappedNamespace(new_name,
+                                             mapped.include_fields,
+                                             mapped.exclude_fields)
+                self.set_plain(plain_src_ns, new_mapped)
+                return new_mapped
 
-            return None
+        self.ex_namespace_set.add(plain_src_ns)
+        return None
 
     def set(self, src_name, mapped_namespace):
         """Add a new namespace mapping."""
-        with self.lock:
-            if "*" in src_name:
-                self.wildcard[src_name] = mapped_namespace
-            else:
-                self.set_plain(src_name, mapped_namespace)
+        if "*" in src_name:
+            self.regex_map.append((namespace_to_regex(src_name),
+                                   src_name, mapped_namespace))
+        else:
+            self.set_plain(src_name, mapped_namespace)
         self.namespace_set.add(src_name)
 
     def unmap_namespace(self, plain_mapped_ns):
@@ -194,17 +211,17 @@ class DestMapping(object):
         in the plain/reverse_plain dictionaries so we search the wildcard
         dictionary as well.
         """
-        if not self.wildcard and not self.plain:
+        if not self.regex_map and not self.plain:
             return plain_mapped_ns
 
         src_name = self.reverse_plain.get(plain_mapped_ns)
         if src_name:
             return src_name
-        for wildcard_src_name, mapped in self.wildcard.items():
-            match = self.match(plain_mapped_ns, mapped.name)
-            if not match:
-                continue
-            return self.replace(match, wildcard_src_name)
+        for _, wildcard_ns, mapped in self.regex_map:
+            original_name = match_replace_regex(
+                namespace_to_regex(mapped.name), plain_mapped_ns, wildcard_ns)
+            if original_name:
+                return original_name
         return None
 
     def map_namespace(self, plain_src_ns):
@@ -226,7 +243,7 @@ class DestMapping(object):
         databases should exist and already been put to plain_db when doing
         create/insert operation.
         """
-        if not self.wildcard and not self.plain:
+        if not self.regex_map and not self.plain:
             return [plain_src_db]
         # Lookup this namespace to seed the plain_db dictionary
         self.get(plain_src_db + '.$cmd')
@@ -251,3 +268,22 @@ class DestMapping(object):
                 full_projection.update(projection)
             return full_projection
         return projection
+
+
+def match_replace_regex(regex, src_namespace, dest_namespace):
+    """Return the new mapped namespace if the src_namespace matches the
+    regex."""
+    match = regex.match(src_namespace)
+    if match:
+        return dest_namespace.replace('*', match.group(1))
+    return None
+
+
+def namespace_to_regex(namespace):
+    """Create a RegexObject from a wildcard namespace."""
+    if namespace.find('*') < namespace.find('.'):
+        # A database name cannot contain a '.' character
+        wildcard_group = '([^.]*)'
+    else:
+        wildcard_group = '(.*)'
+    return re.compile(r'\A' + namespace.replace('*', wildcard_group) + r'\Z')

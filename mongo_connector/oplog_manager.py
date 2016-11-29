@@ -235,24 +235,17 @@ class OplogThread(threading.Thread):
             else:
                 return True, False
 
-        # Search only for a database name if the operation is a command
-        # Commands in general do not contain a collection name, eg
-        # dropDatabase has only the database to drop. For that reason
-        # we cannot rename collections in the same database to multiple
-        # target databases with a dynamic mapping.
-        # db.* : db*.collection is invalid because we may not know all the
-        # databases that db maps to in the target system.
-
         # Rename or filter out namespaces that are ignored keeping
         # included gridfs namespaces.
         new_ns = self.dest_mapping_stru.map_namespace(ns)
-        if new_ns is None and not (
-                is_gridfs_file and
-                self.dest_mapping_stru.match_set(ns, self.gridfs_set)):
-
-            LOG.debug("OplogThread: Skipping oplog entry: "
-                      "'%s' is not in the namespace set." % (ns,))
-            return True, False
+        if new_ns is None:
+            if is_gridfs_file:
+                # Gridfs files should not be skipped
+                new_ns = ns
+            else:
+                LOG.debug("OplogThread: Skipping oplog entry: "
+                          "'%s' is not in the namespace set." % (ns,))
+                return True, False
 
         # update the namespace
         entry['ns'] = new_ns
@@ -953,7 +946,8 @@ class OplogThread(threading.Thread):
             # or removing them in each target system
             for namespace, doc_list in rollback_set.items():
                 # Get the original namespace
-                original_namespace = self.dest_mapping_stru.unmap_namespace(namespace)
+                original_namespace = self.dest_mapping_stru.unmap_namespace(
+                    namespace)
                 if not original_namespace:
                     original_namespace = namespace
 
