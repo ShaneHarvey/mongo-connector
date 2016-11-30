@@ -30,6 +30,10 @@ _MappedNamespace = namedtuple('MappedNamespace',
 
 class MappedNamespace(_MappedNamespace):
     def __new__(cls, name=None, include_fields=None, exclude_fields=None):
+        if include_fields is None:
+            include_fields = set()
+        if exclude_fields is None:
+            exclude_fields = set()
         return super(MappedNamespace, cls).__new__(
             cls, name, include_fields, exclude_fields)
 
@@ -105,8 +109,8 @@ class DestMapping(object):
         self.plain_db = {}
 
         # Fields to include or exclude from all namespaces
-        self.include_fields = include_fields
-        self.exclude_fields = exclude_fields
+        self.include_fields = validate_include_fields(include_fields)
+        self.exclude_fields = validate_exclude_fields(exclude_fields)
 
         # the input namespace_set and ex_namespace_set could contain wildcard
         self.namespace_set = set()
@@ -126,7 +130,9 @@ class DestMapping(object):
                 self._add_mapping(src_name, v.get('rename'), v.get('fields'),
                                   v.get('excludeFields'))
             else:
-                self._add_mapping(src_name, v)
+                self._add_mapping(src_name, v, include_fields, exclude_fields)
+
+
 
     def _add_mapping(self, src_name, dest_name=None, include_fields=None,
                      exclude_fields=None):
@@ -138,8 +144,12 @@ class DestMapping(object):
                 "namespace mapping for: '%s'" % (src_name,))
         if dest_name is None:
             dest_name = src_name
-        self.set(src_name, MappedNamespace(dest_name, include_fields,
-                                           exclude_fields))
+        self.set(src_name, MappedNamespace(
+            name=dest_name,
+            include_fields=validate_include_fields(
+                self.include_fields, include_fields),
+            exclude_fields=validate_exclude_fields(
+                self.exclude_fields, exclude_fields)))
         # Add the namespace for commands on this database
         cmd_name = src_name.split('.', 1)[0] + '.$cmd'
         dest_cmd_name = dest_name.split('.', 1)[0] + '.$cmd'
@@ -174,7 +184,8 @@ class DestMapping(object):
             return None
         if not self.regex_map and not self.plain:
             # here we include all namespaces
-            return MappedNamespace(plain_src_ns)
+            return MappedNamespace(plain_src_ns, self.include_fields,
+                                   self.exclude_fields)
         # search in plain mappings first
         try:
             return self.plain[plain_src_ns]
@@ -249,25 +260,20 @@ class DestMapping(object):
         self.get(plain_src_db + '.$cmd')
         return list(self.plain_db.get(plain_src_db, set()))
 
-    def fields(self, plain_src_ns):
-        """Get the fields to include and exclude for a given namespace."""
-        mapped = self.get(plain_src_ns)
-        if mapped:
-            return mapped.include_fields, mapped.exclude_fields
-        else:
-            return None, None
-
-    def projection(self, plain_src_name, projection):
+    def projection(self, plain_src_name):
         """For the given source namespace return the projected fields."""
-        include_fields, exclude_fields = self.fields(plain_src_name)
-        fields = include_fields or exclude_fields
-        include = 1 if include_fields else 0
+        if plain_src_name:
+            mapped = self.get(plain_src_name)
+            if not mapped:
+                return None
+            fields = mapped.include_fields or mapped.exclude_fields
+            include = 1 if mapped.include_fields else 0
+        else:
+            fields = self.include_fields or self.exclude_fields
+            include = 1 if self.include_fields else 0
         if fields:
-            full_projection = dict((field, include) for field in fields)
-            if projection:
-                full_projection.update(projection)
-            return full_projection
-        return projection
+            return dict((field, include) for field in fields)
+        return None
 
 
 def match_replace_regex(regex, src_namespace, dest_namespace):
@@ -287,3 +293,23 @@ def namespace_to_regex(namespace):
     else:
         wildcard_group = '(.*)'
     return re.compile(r'\A' + namespace.replace('*', wildcard_group) + r'\Z')
+
+
+def validate_include_fields(include_fields, namespace_fields=None):
+    include_fields = set(include_fields or [])
+    namespace_fields = set(namespace_fields or [])
+    merged = include_fields | namespace_fields
+    if merged:
+        merged.add('_id')
+    return merged
+
+
+def validate_exclude_fields(exclude_fields, namespace_fields=None):
+    exclude_fields = set(exclude_fields or [])
+    namespace_fields = set(namespace_fields or [])
+    merged = exclude_fields | namespace_fields
+    if '_id' in merged:
+        LOG.warning("OplogThread: Cannot exclude '_id' field, "
+                    "ignoring")
+        merged.discard('_id')
+    return merged
