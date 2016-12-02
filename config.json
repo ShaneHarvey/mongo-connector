@@ -45,7 +45,9 @@
             "db.source2": "db.dest2",
             "db2.*": "db2.dest_*",
             "db.col_*": {
-                "rename": "db.new_name_*"
+                "rename": "db.new_name_*",
+                "fields": ["name", "address", "nested.field"],
+                "__excludeFields": ["unimportant_field"]
             }
         },
         "__gridfs": ["db.fs"]

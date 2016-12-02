@@ -108,6 +108,59 @@ class TestDestMapping(unittest.TestCase):
             dest_mapping.map_namespace("db1.col1")
             dest_mapping.map_namespace("db1.col2")
 
+    def test_fields_validation(self):
+        """Test including/excluding fields per namespace."""
+        # Cannot include and exclude fields in the same namespace
+        with self.assertRaises(errors.InvalidConfiguration):
+            DestMapping(user_mapping={
+                "db.col": {"fields": ["a"], "excludeFields": ["b"]}})
+
+        # Cannot include fields globally and then exclude fields
+        with self.assertRaises(errors.InvalidConfiguration):
+            DestMapping(include_fields=["a"], user_mapping={
+                "db.col": {"excludeFields": ["b"]}})
+
+        # Cannot exclude fields globally and then include fields
+        with self.assertRaises(errors.InvalidConfiguration):
+            DestMapping(exclude_fields=["b"], user_mapping={
+                "db.col": {"fields": ["a"]}})
+
+    def test_projection_include_wildcard(self):
+        """Test include_fields on a wildcard namespace."""
+        equivalent_dest_mappings = (
+            DestMapping(include_fields=["foo", "nested.field"],
+                        ex_namespace_set=["ignored.name"]),
+            DestMapping(include_fields=["foo", "nested.field"],
+                        namespace_set=["db.foo"]),
+            DestMapping(include_fields=["foo", "nested.field"],
+                        namespace_set=["db.*"]),
+            DestMapping(user_mapping={
+                "db.*": {"fields": ["foo", "nested.field"]}}),
+            DestMapping(user_mapping={
+                "db.foo": {"fields": ["foo", "nested.field"]}}),
+            DestMapping(include_fields=["foo", "nested.field"], user_mapping={
+                "db.*": {"fields": ["foo", "nested.field"]}})
+        )
+        for dest_mapping in equivalent_dest_mappings:
+            self.assertEqual(dest_mapping.projection("db.foo"),
+                             {"_id": 1, "foo": 1, "nested.field": 1})
+            self.assertIsNone(dest_mapping.projection("ignored.name"))
+
+    def test_projection_exclude_wildcard(self):
+        """Test exclude_fields on a wildcard namespace."""
+        equivalent_dest_mappings = (
+            DestMapping(exclude_fields=["_id", "foo", "nested.field"],
+                        namespace_set=["db.*"]),
+            DestMapping(user_mapping={
+                "db.*": {"excludeFields": ["_id", "foo", "nested.field"]}}),
+            DestMapping(exclude_fields=["foo", "nested.field"], user_mapping={
+                "db.*": {"excludeFields": ["_id", "foo", "nested.field"]}})
+        )
+        for dest_mapping in equivalent_dest_mappings:
+            self.assertEqual(dest_mapping.projection("db.foo"),
+                             {"foo": 0, "nested.field": 0})
+            self.assertIsNone(dest_mapping.projection("ignored.name"))
+
     def test_match_replace_regex(self):
         """Test regex matching and replacing."""
         regex = re.compile(r"\Adb_([^.]*).foo\Z")

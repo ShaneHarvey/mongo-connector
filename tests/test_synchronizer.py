@@ -22,6 +22,7 @@ import time
 sys.path[0:0] = [""]
 
 from mongo_connector.connector import Connector
+from mongo_connector.dest_mapping import DestMapping
 from mongo_connector.test_utils import (assert_soon,
                                         connector_opts,
                                         ReplicaSetSingle)
@@ -138,7 +139,8 @@ class TestSynchronizer(unittest.TestCase):
 
         # ensure update works when fields are given
         opthread = self.connector.shard_set[0]
-        opthread.fields = ['a', 'b', 'c']
+        opthread.dest_mapping_stru = DestMapping(
+            include_fields=['a', 'b', 'c'])
         try:
             doc = update_and_retrieve({"$set": {"d": 10}})
             self.assertEqual(self.conn.test.test.find_one(doc['_id'])['d'], 10)
