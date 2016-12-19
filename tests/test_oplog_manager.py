@@ -314,7 +314,7 @@ class TestOplogManager(unittest.TestCase):
         dest_mapping = {"test.test1": "test.test1_dest",
                         "test.test2": "test.test2_dest"}
         self.opman.namespace_config = NamespaceConfig(
-            namespace_set=source_ns, user_mapping=dest_mapping)
+            namespace_set=source_ns, namespace_options=dest_mapping)
         docman = self.opman.doc_managers[0]
         # start replicating
         self.opman.start()

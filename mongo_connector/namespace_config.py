@@ -95,7 +95,7 @@ class NamespaceConfig(object):
     """Manages included and excluded namespaces.
     """
     def __init__(self, namespace_set=None, ex_namespace_set=None,
-                 gridfs_set=None, user_mapping=None,
+                 gridfs_set=None, namespace_options=None,
                  include_fields=None, exclude_fields=None):
         # A mapping from non-wildcard source namespaces to a MappedNamespace
         # containing the non-wildcard target name.
@@ -123,7 +123,7 @@ class NamespaceConfig(object):
         self._ex_namespace_set = RegexSet.from_namespaces(
             ex_namespace_set or [])
 
-        user_mapping = user_mapping or {}
+        namespace_options = namespace_options or {}
         namespace_set = namespace_set or []
         gridfs_set = gridfs_set or []
         # Add each namespace from the namespace_set and user_mapping
@@ -131,12 +131,12 @@ class NamespaceConfig(object):
         # target system, meaning multiple source namespaces cannot be merged
         # into a single namespace in the target.
         for gridfs_ns in gridfs_set:
-            user_mapping.setdefault(gridfs_ns, {})['gridfs'] = True
+            namespace_options.setdefault(gridfs_ns, {})['gridfs'] = True
         for ns in namespace_set:
-            user_mapping.setdefault(ns, ns)
+            namespace_options.setdefault(ns, ns)
 
         renames = {}
-        for src_name, v in user_mapping.items():
+        for src_name, v in namespace_options.items():
             include_fields, exclude_fields = None, None
             if isinstance(v, dict):
                 target_name = v.get('rename', src_name)

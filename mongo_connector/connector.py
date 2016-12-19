@@ -129,7 +129,7 @@ class Connector(threading.Thread):
         self.namespace_config = NamespaceConfig(
             namespace_set=kwargs.get('ns_set'),
             ex_namespace_set=kwargs.get('ex_ns_set'),
-            user_mapping=kwargs.get('dest_mapping'),
+            namespace_options=kwargs.get('dest_mapping'),
             gridfs=kwargs.get('gridfs_set'))
 
         # Initialize and set the command helper

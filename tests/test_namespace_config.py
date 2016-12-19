@@ -54,8 +54,8 @@ class TestDNamespaceConfig(unittest.TestCase):
         """Test including namespaces with wildcards"""
         equivalent_namespace_configs = (
             NamespaceConfig(namespace_set=["db1.*"]),
-            NamespaceConfig(user_mapping={"db1.*": {}}),
-            NamespaceConfig(user_mapping={"db1.*": {"rename": "db1.*"}}))
+            NamespaceConfig(namespace_options={"db1.*": {}}),
+            NamespaceConfig(namespace_options={"db1.*": {"rename": "db1.*"}}))
         for namespace_config in equivalent_namespace_configs:
             self.assertEqual(namespace_config.unmap_namespace("db1.col1"),
                              "db1.col1")
@@ -71,7 +71,7 @@ class TestDNamespaceConfig(unittest.TestCase):
 
     def test_map_db_wildcard(self):
         """Test a crazy namespace renaming scheme with wildcards."""
-        namespace_config = NamespaceConfig(user_mapping={
+        namespace_config = NamespaceConfig(namespace_options={
             "db.1_*": "db1.new_*",
             "db.2_*": "db2.new_*",
             "db.3": "new_db.3"})
@@ -127,7 +127,7 @@ class TestDNamespaceConfig(unittest.TestCase):
 
     def test_unmap_namespace_wildcard(self):
         """Test un-mapping a namespace that was never explicitly mapped."""
-        namespace_config = NamespaceConfig(user_mapping={
+        namespace_config = NamespaceConfig(namespace_options={
             "db2.*": "db2.f*",
             "db_*.foo": "db_new_*.foo",
         })
@@ -139,18 +139,18 @@ class TestDNamespaceConfig(unittest.TestCase):
         """Test namespace renaming validation."""
         # Multiple collections cannot be merged into the same target namespace
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(user_mapping={
+            NamespaceConfig(namespace_options={
                 "db1.col1": "newdb.newcol",
                 "db2.col1": "newdb.newcol"})
 
         # Multiple collections cannot be merged into the same target namespace
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(user_mapping={
+            NamespaceConfig(namespace_options={
                 "db*.col1": "newdb.newcol*",
                 "db*.col2": "newdb.newcol*"})
 
         # Multiple collections cannot be merged into the same target namespace
-        namespace_config = NamespaceConfig(user_mapping={
+        namespace_config = NamespaceConfig(namespace_options={
             "*.coll": "*.new_coll",
             "db.*": "new_db.*"})
         namespace_config.map_namespace("new_db.coll")
@@ -162,28 +162,28 @@ class TestDNamespaceConfig(unittest.TestCase):
         # For the sake of map_db, wildcards cannot be moved from database name
         # to collection name.
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(user_mapping={"db*.col": "new_db.col_*"})
+            NamespaceConfig(namespace_options={"db*.col": "new_db.col_*"})
 
         # For the sake of map_db, wildcards cannot be moved from collection
         # name to database name.
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(user_mapping={"db.*": "new_db_*.col"})
+            NamespaceConfig(namespace_options={"db.*": "new_db_*.col"})
 
     def test_fields_validation(self):
         """Test including/excluding fields per namespace."""
         # Cannot include and exclude fields in the same namespace
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(user_mapping={
+            NamespaceConfig(namespace_options={
                 "db.col": {"fields": ["a"], "excludeFields": ["b"]}})
 
         # Cannot include fields globally and then exclude fields
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(include_fields=["a"], user_mapping={
+            NamespaceConfig(include_fields=["a"], namespace_options={
                 "db.col": {"excludeFields": ["b"]}})
 
         # Cannot exclude fields globally and then include fields
         with self.assertRaises(errors.InvalidConfiguration):
-            NamespaceConfig(exclude_fields=["b"], user_mapping={
+            NamespaceConfig(exclude_fields=["b"], namespace_options={
                 "db.col": {"fields": ["a"]}})
 
     def test_projection_include_wildcard(self):
@@ -195,12 +195,12 @@ class TestDNamespaceConfig(unittest.TestCase):
                             namespace_set=["db.foo"]),
             NamespaceConfig(include_fields=["foo", "nested.field"],
                             namespace_set=["db.*"]),
-            NamespaceConfig(user_mapping={
+            NamespaceConfig(namespace_options={
                 "db.*": {"fields": ["foo", "nested.field"]}}),
-            NamespaceConfig(user_mapping={
+            NamespaceConfig(namespace_options={
                 "db.foo": {"fields": ["foo", "nested.field"]}}),
             NamespaceConfig(include_fields=["foo", "nested.field"],
-                            user_mapping={
+                            namespace_options={
                                 "db.*": {"fields": ["foo", "nested.field"]}})
         )
         for namespace_config in equivalent_namespace_configs:
@@ -213,11 +213,11 @@ class TestDNamespaceConfig(unittest.TestCase):
         equivalent_namespace_configs = (
             NamespaceConfig(exclude_fields=["_id", "foo", "nested.field"],
                             namespace_set=["db.*"]),
-            NamespaceConfig(user_mapping={
+            NamespaceConfig(namespace_options={
                 "db.*": {"excludeFields": ["_id", "foo", "nested.field"]}}),
             NamespaceConfig(
                 exclude_fields=["foo", "nested.field"],
-                user_mapping={"db.*": {
+                namespace_options={"db.*": {
                     "excludeFields": ["_id", "foo", "nested.field"]}})
         )
         for namespace_config in equivalent_namespace_configs:
