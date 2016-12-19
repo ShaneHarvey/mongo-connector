@@ -127,8 +127,10 @@ class Connector(threading.Thread):
         # The namespace configuration shared by all OplogThreads and
         # DocManagers
         self.namespace_config = NamespaceConfig(
-            kwargs.get('ns_set'), kwargs.get('ex_ns_set'),
-            kwargs.get('dest_mapping'))
+            namespace_set=kwargs.get('ns_set'),
+            ex_namespace_set=kwargs.get('ex_ns_set'),
+            user_mapping=kwargs.get('dest_mapping'),
+            gridfs=kwargs.get('gridfs_set'))
 
         # Initialize and set the command helper
         command_helper = CommandHelper(self.namespace_config)
@@ -733,6 +735,14 @@ def get_config_options():
         "arrays. Cannot use both 'fields' and 'exclude_fields'.")
 
     def apply_namespaces(option, cli_values):
+        if (option.value['include'] or option.value['exclude'] or
+                option.value['mapping'] or option.value['gridfs']):
+            return apply_old_namespaces(option, cli_values)
+        else:
+            return apply_old_namespaces(option, cli_values)
+
+    def apply_old_namespaces(option, cli_values):
+
         if cli_values['ns_set']:
             option.value['include'] = cli_values['ns_set'].split(',')
 
@@ -760,13 +770,6 @@ def get_config_options():
         if len(ex_ns_set) != len(set(ex_ns_set)):
             raise errors.InvalidConfiguration(
                 "Exclude namespace set should not contain any duplicates.")
-
-        # not allow to exist both 'include' and 'exclude'
-        if ns_set and ex_ns_set:
-            raise errors.InvalidConfiguration(
-                "Cannot use both namespace 'include' "
-                "(--namespace-set) and 'exclude' "
-                "(--exclude-namespace-set).")
 
         # validate 'include' format
         for ns in ns_set:

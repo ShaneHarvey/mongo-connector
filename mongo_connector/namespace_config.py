@@ -24,17 +24,18 @@ from mongo_connector import errors
 LOG = logging.getLogger(__name__)
 
 
-_Namespace = namedtuple('Namespace', ['dest_name', 'source_name',
+_Namespace = namedtuple('Namespace', ['dest_name', 'source_name', 'gridfs'
                                       'include_fields', 'exclude_fields'])
 
 
 class Namespace(_Namespace):
-    def __new__(cls, dest_name=None, source_name=None, include_fields=None,
-                exclude_fields=None):
+    def __new__(cls, dest_name=None, source_name=None, gridfs=False,
+                include_fields=None, exclude_fields=None):
         include_fields = set(include_fields or [])
         exclude_fields = set(exclude_fields or [])
         return super(Namespace, cls).__new__(
-            cls, dest_name, source_name, include_fields, exclude_fields)
+            cls, dest_name, source_name, gridfs, include_fields,
+            exclude_fields)
 
 
 class RegexSet(MutableSet):
@@ -94,7 +95,8 @@ class NamespaceConfig(object):
     """Manages included and excluded namespaces.
     """
     def __init__(self, namespace_set=None, ex_namespace_set=None,
-                 user_mapping=None, include_fields=None, exclude_fields=None):
+                 gridfs_set=None, user_mapping=None,
+                 include_fields=None, exclude_fields=None):
         # A mapping from non-wildcard source namespaces to a MappedNamespace
         # containing the non-wildcard target name.
         self._plain = {}
@@ -123,10 +125,13 @@ class NamespaceConfig(object):
 
         user_mapping = user_mapping or {}
         namespace_set = namespace_set or []
+        gridfs_set = gridfs_set or []
         # Add each namespace from the namespace_set and user_mapping
         # parameters. Namespaces have a one-to-one relationship with the
         # target system, meaning multiple source namespaces cannot be merged
         # into a single namespace in the target.
+        for gridfs_ns in gridfs_set:
+            user_mapping.setdefault(gridfs_ns, {})['gridfs'] = True
         for ns in namespace_set:
             user_mapping.setdefault(ns, ns)
 
@@ -144,7 +149,7 @@ class NamespaceConfig(object):
                                  exclude_fields)
         validate_target_namespaces(renames)
 
-    def _add_collection(self, src_name, dest_name, include_fields,
+    def _add_collection(self, src_name, dest_name, gridfs, include_fields,
                         exclude_fields):
         """Add the collection name and the corresponding command namespace."""
         include_fields = include_fields or []
@@ -366,6 +371,37 @@ def validate_target_namespaces(user_mapping):
                      "namespace. Mapping from '%s' to '%s' might overlap "
                      "with mapping from '%s' to '%s'." %
                      (namespace2, target2, namespace1, target1))
+
+
+def validate_namespace_config(namespace_set=None, ex_namespace_set=None,
+                              gridfs_set=None, user_mapping=None,
+                              include_fields=None, exclude_fields=None):
+    namespaces = {}
+    user_mapping = user_mapping or {}
+    namespace_set = namespace_set or []
+    gridfs_set = gridfs_set or []
+    # Add each namespace from the namespace_set and user_mapping
+    # parameters. Namespaces have a one-to-one relationship with the
+    # target system, meaning multiple source namespaces cannot be merged
+    # into a single namespace in the target.
+    for gridfs_ns in gridfs_set:
+        user_mapping.setdefault(gridfs_ns, {})['gridfs'] = True
+    for ns in namespace_set:
+        user_mapping.setdefault(ns, ns)
+
+    renames = {}
+    for src_name, v in user_mapping.items():
+        include_fields, exclude_fields = None, None
+        if isinstance(v, dict):
+            target_name = v.get('rename', src_name)
+            include_fields = v.get('fields')
+            exclude_fields = v.get('excludeFields')
+        else:
+            target_name = v
+        renames[src_name] = target_name
+        self._add_collection(src_name, target_name, include_fields,
+                             exclude_fields)
+    validate_target_namespaces(renames)
 
 
 def match_replace_regex(regex, src_namespace, dest_namespace):
