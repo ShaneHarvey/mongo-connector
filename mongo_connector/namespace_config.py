@@ -222,9 +222,18 @@ class NamespaceConfig(object):
         """Given a plain source namespace, return the corresponding plain
         target namespace, or None if it is not included.
         """
-        mapped = self.lookup(plain_src_ns)
-        if mapped:
-            return mapped.dest_name
+        namespace = self.lookup(plain_src_ns)
+        if namespace:
+            return namespace.dest_name
+        return None
+
+    def gridfs_namespace(self, plain_src_ns):
+        """Given a plain source namespace, return the corresponding plain
+        target namespace if this namespace is a gridfs collection.
+        """
+        namespace = self.lookup(plain_src_ns)
+        if namespace and namespace.gridfs:
+            return namespace.dest_name
         return None
 
     def unmap_namespace(self, plain_target_ns):

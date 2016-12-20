@@ -103,6 +103,7 @@ class TestMongo(MongoTestCase):
         self._remove()
         self.connector = Connector(
             mongo_address=self.repl_set.uri,
+            collection_dump=False,
             ns_set=['test.test'],
             doc_managers=(self.mongo_doc,),
             gridfs_set=['test.test'],

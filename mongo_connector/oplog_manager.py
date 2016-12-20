@@ -111,9 +111,6 @@ class OplogThread(threading.Thread):
         # Represents the last checkpoint for a OplogThread.
         self.oplog_progress = oplog_progress_dict
 
-        # The set of gridfs namespaces to process from the mongo cluster
-        self.gridfs_set = kwargs.get('gridfs_set', [])
-
         # The namespace configuration
         self.namespace_config = namespace_config
 
@@ -129,22 +126,6 @@ class OplogThread(threading.Thread):
         if not self.oplog.find_one():
             err_msg = 'OplogThread: No oplog for thread:'
             LOG.warning('%s %s' % (err_msg, self.primary_client))
-
-    @property
-    def gridfs_set(self):
-        return self._gridfs_set
-
-    @gridfs_set.setter
-    def gridfs_set(self, gridfs_set):
-        self._gridfs_set = gridfs_set
-        self._gridfs_files_set = [ns + '.files' for ns in gridfs_set]
-
-    @property
-    def gridfs_files_set(self):
-        try:
-            return self._gridfs_files_set
-        except AttributeError:
-            return []
 
     def _should_skip_entry(self, entry):
         """Determine if this oplog entry should be skipped.
@@ -175,8 +156,8 @@ class OplogThread(threading.Thread):
 
         is_gridfs_file = False
         if coll.endswith(".files"):
-            if ns in self.gridfs_files_set:
-                ns = ns[:-len(".files")]
+            ns = ns[:-len(".files")]
+            if self.namespace_config.gridfs_namespace(ns):
                 is_gridfs_file = True
             else:
                 return True, False
@@ -524,8 +505,8 @@ class OplogThread(threading.Thread):
         # Use a list to workaround python scoping.
         dump_cancelled = [False]
 
-        def get_all_ns():
-            all_ns_set = []
+        def get_all_ns(gridfs_namespaces):
+            ns_set = []
             db_list = retry_until_ok(self.primary_client.database_names)
             for database in db_list:
                 if database == "config" or database == "local":
@@ -540,11 +521,16 @@ class OplogThread(threading.Thread):
                     if coll.endswith(".files") or coll.endswith(".chunks"):
                         continue
                     namespace = "%s.%s" % (database, coll)
-                    if self.namespace_config.map_namespace(namespace):
-                        all_ns_set.append(namespace)
-            return all_ns_set
+                    if gridfs_namespaces:
+                        if self.namespace_config.map_namespace(namespace):
+                            ns_set.append(namespace)
+                    else:
+                        if self.namespace_config.gridfs_namespace(namespace):
+                            ns_set.append(namespace)
+            return ns_set
 
-        dump_set = get_all_ns()
+        dump_set = get_all_ns(gridfs_namespaces=False)
+        gridfs_dump_set = get_all_ns(gridfs_namespaces=True)
 
         LOG.debug("OplogThread: Dumping set of collections %s " % dump_set)
 
@@ -638,7 +624,7 @@ class OplogThread(threading.Thread):
                 upsert_all(dm)
 
                 # Dump GridFS files
-                for gridfs_ns in self.gridfs_set:
+                for gridfs_ns in gridfs_dump_set:
                     mongo_coll = self.get_collection(gridfs_ns)
                     from_coll = self.get_collection(gridfs_ns + '.files')
                     dest_ns = self.namespace_config.map_namespace(gridfs_ns)

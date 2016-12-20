@@ -139,7 +139,10 @@ class TestNamespaceConfig(unittest.TestCase):
             self.assertEqual(namespace_config.map_namespace("db1.col1"),
                              "db1.col1")
             self.assertIsNone(namespace_config.map_namespace("db2.col4"))
-            self.assertTrue(namespace_config.lookup("db1.db").gridfs)
+            self.assertTrue(namespace_config.lookup("db1.col1").gridfs)
+            self.assertEqual(namespace_config.gridfs_namespace("db1.col1"),
+                             "db1.col1")
+            self.assertIsNone(namespace_config.gridfs_namespace("not.gridfs"))
 
     def test_exclude_plain(self):
         """Test excluding namespaces without wildcards"""
