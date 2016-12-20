@@ -152,11 +152,13 @@ class TestNamespaceConfig(unittest.TestCase):
 
     def test_exclude_wildcard(self):
         """Test excluding namespaces with wildcards"""
-        equivalent_namespace_configs = (
-            NamespaceConfig(ex_namespace_set=["ex.*"]),
-            NamespaceConfig(namespace_options={"ex.*": False})
+        equivalent_namespace_configs_for_tests = (
+            NamespaceConfig(ex_namespace_set=["ex.*", "ex2.*"]),
+            NamespaceConfig(namespace_options={"ex.*": False, "ex2.*": False}),
+            # Multiple wildcards in exclude namespace
+            NamespaceConfig(ex_namespace_set=["e*.*"]),
         )
-        for namespace_config in equivalent_namespace_configs:
+        for namespace_config in equivalent_namespace_configs_for_tests:
             self.assertEqual(namespace_config.unmap_namespace("db.col"),
                              "db.col")
             self.assertEqual(namespace_config.unmap_namespace("ex.clude"),
@@ -164,7 +166,7 @@ class TestNamespaceConfig(unittest.TestCase):
             self.assertEqual(namespace_config.map_namespace("db.col"),
                              "db.col")
             self.assertIsNone(namespace_config.map_namespace("ex.clude"))
-            self.assertIsNone(namespace_config.map_namespace("ex.clude2"))
+            self.assertIsNone(namespace_config.map_namespace("ex2.clude"))
 
     def test_include_and_exclude(self):
         """Test including and excluding namespaces at the same time."""
@@ -241,6 +243,17 @@ class TestNamespaceConfig(unittest.TestCase):
         self.assertTrue(overridden.gridfs)
         self.assertFalse(overridden.include_fields)
 
+    def test_invalid_collection_name_validation(self):
+        """Test that invalid collection names raise InvalidConfiguration."""
+        equivalent_namespace_config_kwargs = (
+            dict(namespace_options={"invalid_db": "newinvalid_db"}),
+            dict(namespace_set=["invalid_db."]),
+            dict(ex_namespace_set=[".invalid_db"]),
+            dict(gridfs_set=[".invalid_db"])
+        )
+        for kwargs in equivalent_namespace_config_kwargs:
+            with self.assertRaises(errors.InvalidConfiguration):
+                NamespaceConfig(**kwargs)
 
     def test_rename_validation(self):
         """Test namespace renaming validation."""

@@ -14,6 +14,7 @@
 """Discovers the MongoDB cluster and starts the connector.
 """
 
+import copy
 import json
 import logging
 import logging.handlers
@@ -130,8 +131,12 @@ class Connector(threading.Thread):
         self.namespace_config = NamespaceConfig(
             namespace_set=kwargs.get('ns_set'),
             ex_namespace_set=kwargs.get('ex_ns_set'),
-            namespace_options=kwargs.get('dest_mapping'),
-            gridfs=kwargs.get('gridfs_set'))
+            gridfs_set=kwargs.get('gridfs_set'),
+            dest_mapping=kwargs.get('dest_mapping'),
+            namespace_options=kwargs.get('namespace_options'),
+            include_fields=kwargs.get('fields'),
+            exclude_fields=kwargs.get('exclude_fields')
+        )
 
         # Initialize and set the command helper
         command_helper = CommandHelper(self.namespace_config)
@@ -188,6 +193,7 @@ class Connector(threading.Thread):
             ns_set=config['namespaces.include'],
             ex_ns_set=config['namespaces.exclude'],
             dest_mapping=config['namespaces.mapping'],
+            namespace_options=config['namespaces.namespace_options'],
             gridfs_set=config['namespaces.gridfs'],
             ssl_certfile=config['ssl.sslCertfile'],
             ssl_keyfile=config['ssl.sslKeyfile'],
@@ -782,15 +788,17 @@ def get_config_options():
 
     def apply_unified_namespace_options(option, cli_values):
         merge_namespaces_cli(option, cli_values)
-        ns_set = option.value.pop('include', None)
-        ex_ns_set = option.value.pop('exclude', None)
-        gridfs_set = option.value.pop('gridfs', None)
-        dest_mapping = option.value.pop('mapping', None)
+        namespace_options = copy.deepcopy(option.value)
+        ns_set = namespace_options.pop('include', None)
+        ex_ns_set = namespace_options.pop('exclude', None)
+        gridfs_set = namespace_options.pop('gridfs', None)
+        dest_mapping = namespace_options.pop('mapping', None)
+        option.value["namespace_options"] = namespace_options
 
         validate_namespace_options(
             namespace_set=ns_set, ex_namespace_set=ex_ns_set,
             dest_mapping=dest_mapping,
-            namespace_options=option.value, gridfs_set=gridfs_set)
+            namespace_options=namespace_options, gridfs_set=gridfs_set)
 
     def apply_disjoint_namespace_options(option, cli_values):
         merge_namespaces_cli(option, cli_values)

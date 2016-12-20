@@ -306,6 +306,13 @@ def wildcards_overlap(name1, name2):
     return False
 
 
+def _validate_collection(name):
+    """Return true if this name looks like a MongoDB collection name."""
+    if name.find('.', 1, len(name) - 1) < 0:
+        raise errors.InvalidConfiguration(
+            "Invalid MongoDB collection name '%s'!" % (name,))
+
+
 def _validate_namespaces(namespaces):
     """Validate wildcards and renaming in namespaces.
 
@@ -315,6 +322,8 @@ def _validate_namespaces(namespaces):
     """
     for source, namespace in namespaces.items():
         target = namespace.dest_name
+        _validate_collection(source)
+        _validate_collection(target)
         if source.count("*") > 1 or target.count("*") > 1:
             raise errors.InvalidConfiguration(
                 "The namespace mapping from '%s' to '%s' cannot contain more "
@@ -433,6 +442,7 @@ def validate_namespace_options(namespace_set=None, ex_namespace_set=None,
         exclude_fields=exclude_fields)
 
     for excluded_name in ex_namespace_set:
+        _validate_collection(excluded_name)
         if excluded_name in namespaces:
             raise errors.InvalidConfiguration(
                 "Cannot include namespace '%s', it is already excluded." %
@@ -464,14 +474,12 @@ def wildcard_in_db(namespace):
 
 def namespace_to_regex(namespace):
     """Create a RegexObject from a wildcard namespace."""
-    if wildcard_in_db(namespace):
-        # A database name cannot contain a '.' character
-        wildcard_group = '([^.]*)'
-    else:
-        wildcard_group = '(.*)'
-    return re.compile(r'\A' +
-                      re.escape(namespace).replace('\*', wildcard_group) +
-                      r'\Z')
+    db_name, coll_name = namespace.split('.', 1)
+    # A database name cannot contain a '.' character
+    db_regex = re.escape(db_name).replace('\*', '([^.]*)')
+    # But a collection name can.
+    coll_regex = re.escape(coll_name).replace('\*', '(.*)')
+    return re.compile(r'\A' + db_regex + r'\.' + coll_regex + r'\Z')
 
 
 def validate_include_fields(include_fields, namespace_fields=None):
