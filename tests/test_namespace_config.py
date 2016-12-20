@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
 import re
 
 from tests import unittest
@@ -21,7 +23,11 @@ from mongo_connector.namespace_config import (
 from mongo_connector import errors
 
 
-class TestDNamespaceConfig(unittest.TestCase):
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.realpath(__file__))), "config.json")
+
+
+class TestNamespaceConfig(unittest.TestCase):
     """Test the NamespaceConfig class"""
 
     def test_default(self):
@@ -32,6 +38,12 @@ class TestDNamespaceConfig(unittest.TestCase):
         self.assertEqual(namespace_config.map_db("db1"), ["db1"])
         self.assertEqual(namespace_config.map_namespace("db1.col1"),
                          "db1.col1")
+
+    def test_config(self):
+        """Test that the namespace option in the example config is valid."""
+        with open(CONFIG_PATH) as filep:
+            namespaces = json.load(filep)['__namespaces']
+            NamespaceConfig(namespace_options=namespaces)
 
     def test_include_plain(self):
         """Test including namespaces without wildcards"""
@@ -55,12 +67,14 @@ class TestDNamespaceConfig(unittest.TestCase):
         equivalent_namespace_configs = (
             NamespaceConfig(namespace_set=["db1.*"]),
             NamespaceConfig(namespace_options={"db1.*": {}}),
-            NamespaceConfig(namespace_options={"db1.*": {"rename": "db1.*"}}))
+            NamespaceConfig(namespace_options={"db1.*": True}),
+            NamespaceConfig(namespace_options={"db1.*": {"rename": "db1.*"}})
+        )
         for namespace_config in equivalent_namespace_configs:
             self.assertEqual(namespace_config.unmap_namespace("db1.col1"),
                              "db1.col1")
-            self.assertEqual(namespace_config.unmap_namespace("db1.col1"),
-                             "db1.col1")
+            self.assertEqual(namespace_config.unmap_namespace("db1.col2"),
+                             "db1.col2")
             self.assertEqual(namespace_config.lookup("db1.col1"),
                              Namespace(dest_name="db1.col1",
                                        source_name="db1.col1"))
@@ -106,6 +120,27 @@ class TestDNamespaceConfig(unittest.TestCase):
             "db&_foo.$_^_#_!_[_]_")
         self.assertIsNone(namespace_config.map_namespace("db&.foo"))
 
+    def test_gridfs(self):
+        """Test the gridfs property is set correctly."""
+        equivalent_namespace_configs = (
+            NamespaceConfig(gridfs_set=["db1.*"]),
+            NamespaceConfig(namespace_options={"db1.*": {"gridfs": True}})
+        )
+        for namespace_config in equivalent_namespace_configs:
+            self.assertEqual(namespace_config.unmap_namespace("db1.col1"),
+                             "db1.col1")
+            self.assertEqual(namespace_config.unmap_namespace("db1.col2"),
+                             "db1.col2")
+            self.assertEqual(namespace_config.lookup("db1.col1"),
+                             Namespace(dest_name="db1.col1",
+                                       source_name="db1.col1",
+                                       gridfs=True))
+            self.assertListEqual(namespace_config.map_db("db1"), ["db1"])
+            self.assertEqual(namespace_config.map_namespace("db1.col1"),
+                             "db1.col1")
+            self.assertIsNone(namespace_config.map_namespace("db2.col4"))
+            self.assertTrue(namespace_config.lookup("db1.db").gridfs)
+
     def test_exclude_plain(self):
         """Test excluding namespaces without wildcards"""
         namespace_config = NamespaceConfig(ex_namespace_set=["ex.clude"])
@@ -117,13 +152,54 @@ class TestDNamespaceConfig(unittest.TestCase):
 
     def test_exclude_wildcard(self):
         """Test excluding namespaces with wildcards"""
-        namespace_config = NamespaceConfig(ex_namespace_set=["ex.*"])
-        self.assertEqual(namespace_config.unmap_namespace("db.col"), "db.col")
-        self.assertEqual(namespace_config.unmap_namespace("ex.clude"),
-                         "ex.clude")
-        self.assertEqual(namespace_config.map_namespace("db.col"), "db.col")
-        self.assertIsNone(namespace_config.map_namespace("ex.clude"))
-        self.assertIsNone(namespace_config.map_namespace("ex.clude2"))
+        equivalent_namespace_configs = (
+            NamespaceConfig(ex_namespace_set=["ex.*"]),
+            NamespaceConfig(namespace_options={"ex.*": False})
+        )
+        for namespace_config in equivalent_namespace_configs:
+            self.assertEqual(namespace_config.unmap_namespace("db.col"),
+                             "db.col")
+            self.assertEqual(namespace_config.unmap_namespace("ex.clude"),
+                             "ex.clude")
+            self.assertEqual(namespace_config.map_namespace("db.col"),
+                             "db.col")
+            self.assertIsNone(namespace_config.map_namespace("ex.clude"))
+            self.assertIsNone(namespace_config.map_namespace("ex.clude2"))
+
+    def test_include_and_exclude(self):
+        """Test including and excluding namespaces at the same time."""
+        equivalent_namespace_configs_for_tests = (
+            NamespaceConfig(ex_namespace_set=["ex.*"],
+                            namespace_set=["ex.cluded_still", "in.cluded"]),
+            NamespaceConfig(namespace_options={
+                "ex.*": False, "ex.cluded_still": True, "in.cluded": True}),
+            NamespaceConfig(ex_namespace_set=["ex.cluded", "ex.cluded_still"],
+                            namespace_set=["ex.*", "in.cluded"])
+        )
+        for namespace_config in equivalent_namespace_configs_for_tests:
+            self.assertIsNone(namespace_config.map_namespace("ex.cluded"))
+            # Excluded namespaces take precedence over included ones.
+            self.assertIsNone(
+                namespace_config.map_namespace("ex.cluded_still"))
+            # Namespaces that are not explicitly included are ignored.
+            self.assertIsNone(
+                namespace_config.map_namespace("also.not.included"))
+            self.assertEqual(
+                namespace_config.map_namespace("in.cluded"), "in.cluded")
+
+    def test_include_and_exclude_validation(self):
+        """Test including and excluding the same namespaces is an error."""
+        equivalent_namespace_config_kwargs = (
+            dict(ex_namespace_set=["ex.cluded"],
+                 namespace_set=["in.cluded", "ex.cluded"]),
+            dict(namespace_set=["ex.cluded"], namespace_options={
+                "ex.cluded": False, "in.cluded": True}),
+            dict(ex_namespace_set=["ex.cluded", "in.cluded"],
+                 namespace_options={"in.cluded": True})
+        )
+        for kwargs in equivalent_namespace_config_kwargs:
+            with self.assertRaises(errors.InvalidConfiguration):
+                NamespaceConfig(**kwargs)
 
     def test_unmap_namespace_wildcard(self):
         """Test un-mapping a namespace that was never explicitly mapped."""
@@ -134,6 +210,37 @@ class TestDNamespaceConfig(unittest.TestCase):
         self.assertEqual(namespace_config.unmap_namespace("db2.foo"), "db2.oo")
         self.assertEqual(namespace_config.unmap_namespace("db_new_123.foo"),
                          "db_123.foo")
+
+    def test_override_namespace_options(self):
+        """Test gridfs_set and dest_mapping arguments override
+        namespace_options.
+        """
+        namespace_config = NamespaceConfig(
+            namespace_set=["override.me", "override.me2"],
+            gridfs_set=["override.me", "override.me2"],
+            dest_mapping={
+                "override.me": "overridden.1",
+                "override.me2": "overridden.2"
+            },
+            namespace_options={
+                "override.me": {
+                    "rename": "override.me",
+                    "includeFields": ["_id", "dont_remove"],
+                    "gridfs": True
+                },
+                "override.me2": "override.me2"
+            }
+        )
+        overridden = namespace_config.lookup("override.me")
+        self.assertEqual(overridden.dest_name, "overridden.1")
+        self.assertTrue(overridden.gridfs)
+        self.assertEqual(overridden.include_fields,
+                         set(["_id", "dont_remove"]))
+        overridden = namespace_config.lookup("override.me2")
+        self.assertEqual(overridden.dest_name, "overridden.2")
+        self.assertTrue(overridden.gridfs)
+        self.assertFalse(overridden.include_fields)
+
 
     def test_rename_validation(self):
         """Test namespace renaming validation."""
@@ -174,7 +281,7 @@ class TestDNamespaceConfig(unittest.TestCase):
         # Cannot include and exclude fields in the same namespace
         with self.assertRaises(errors.InvalidConfiguration):
             NamespaceConfig(namespace_options={
-                "db.col": {"fields": ["a"], "excludeFields": ["b"]}})
+                "db.col": {"includeFields": ["a"], "excludeFields": ["b"]}})
 
         # Cannot include fields globally and then exclude fields
         with self.assertRaises(errors.InvalidConfiguration):
@@ -184,7 +291,7 @@ class TestDNamespaceConfig(unittest.TestCase):
         # Cannot exclude fields globally and then include fields
         with self.assertRaises(errors.InvalidConfiguration):
             NamespaceConfig(exclude_fields=["b"], namespace_options={
-                "db.col": {"fields": ["a"]}})
+                "db.col": {"includeFields": ["a"]}})
 
     def test_projection_include_wildcard(self):
         """Test include_fields on a wildcard namespace."""
@@ -196,12 +303,14 @@ class TestDNamespaceConfig(unittest.TestCase):
             NamespaceConfig(include_fields=["foo", "nested.field"],
                             namespace_set=["db.*"]),
             NamespaceConfig(namespace_options={
-                "db.*": {"fields": ["foo", "nested.field"]}}),
+                "db.*": {"includeFields": ["foo", "nested.field"]}}),
             NamespaceConfig(namespace_options={
-                "db.foo": {"fields": ["foo", "nested.field"]}}),
+                "db.foo": {"includeFields": ["foo", "nested.field"]}}),
             NamespaceConfig(include_fields=["foo", "nested.field"],
                             namespace_options={
-                                "db.*": {"fields": ["foo", "nested.field"]}})
+                                "db.*": {
+                                    "includeFields": ["foo", "nested.field"]
+                                }})
         )
         for namespace_config in equivalent_namespace_configs:
             self.assertEqual(namespace_config.projection("db.foo"),
