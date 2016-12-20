@@ -356,8 +356,8 @@ def _validate_namespaces(namespaces):
 
     for source1, source2 in combinations(namespaces.keys(), 2):
         if wildcards_overlap(source1, source2):
-            LOG.warn('Namespaces "%s" and "%s" may match the '
-                     'same source namespace.', source1, source2)
+            LOG.warning('Namespaces "%s" and "%s" may match the '
+                        'same source namespace.', source1, source2)
         target1 = namespaces[source1].dest_name
         target2 = namespaces[source2].dest_name
         if target1 == target2:
@@ -367,10 +367,11 @@ def _validate_namespaces(namespaces):
                 "corresponds to '%s' in the target system." %
                 (source2, target2, source1, target1))
         if wildcards_overlap(target1, target2):
-            LOG.warn("Multiple namespaces cannot be combined into one target "
-                     "namespace. Mapping from '%s' to '%s' might overlap "
-                     "with mapping from '%s' to '%s'." %
-                     (source2, target2, source1, target1))
+            LOG.warning(
+                "Multiple namespaces cannot be combined into one target "
+                "namespace. Mapping from '%s' to '%s' might overlap "
+                "with mapping from '%s' to '%s'." %
+                (source2, target2, source1, target1))
 
 
 def _construct_namespace_options(namespace_set=None, ex_namespace_set=None,
