@@ -464,6 +464,11 @@ def validate_namespace_options(namespace_set=None, ex_namespace_set=None,
                 "Cannot mix include fields and exclude fields in "
                 "namespace mapping for: '%s'" % (namespace.source_name,))
 
+        if namespace.gridfs and namespace.dest_name != namespace.source_name:
+            raise errors.InvalidConfiguration(
+                "GridFS namespaces cannot be renamed: '%s'" % (
+                    namespace.source_name,))
+
     _validate_namespaces(namespaces)
     return ex_namespace_set, namespaces.values()
 

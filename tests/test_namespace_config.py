@@ -222,7 +222,7 @@ class TestNamespaceConfig(unittest.TestCase):
         """
         namespace_config = NamespaceConfig(
             namespace_set=["override.me", "override.me2"],
-            gridfs_set=["override.me", "override.me2"],
+            gridfs_set=["override.me3"],
             dest_mapping={
                 "override.me": "overridden.1",
                 "override.me2": "overridden.2"
@@ -230,21 +230,21 @@ class TestNamespaceConfig(unittest.TestCase):
             namespace_options={
                 "override.me": {
                     "rename": "override.me",
-                    "includeFields": ["_id", "dont_remove"],
-                    "gridfs": True
+                    "includeFields": ["_id", "dont_remove"]
                 },
-                "override.me2": "override.me2"
+                "override.me2": "override.me2",
+                "override.me3": {'gridfs': False}
+
             }
         )
         overridden = namespace_config.lookup("override.me")
         self.assertEqual(overridden.dest_name, "overridden.1")
-        self.assertTrue(overridden.gridfs)
         self.assertEqual(overridden.include_fields,
                          set(["_id", "dont_remove"]))
         overridden = namespace_config.lookup("override.me2")
         self.assertEqual(overridden.dest_name, "overridden.2")
-        self.assertTrue(overridden.gridfs)
         self.assertFalse(overridden.include_fields)
+        self.assertTrue(namespace_config.gridfs_namespace("override.me3"))
 
     def test_invalid_collection_name_validation(self):
         """Test that invalid collection names raise InvalidConfiguration."""
@@ -257,6 +257,12 @@ class TestNamespaceConfig(unittest.TestCase):
         for kwargs in equivalent_namespace_config_kwargs:
             with self.assertRaises(errors.InvalidConfiguration):
                 NamespaceConfig(**kwargs)
+
+    def test_gridfs_rename_invalid(self):
+        """Test that renaming a GridFS collection is invalid."""
+        with self.assertRaises(errors.InvalidConfiguration):
+            NamespaceConfig(namespace_options={
+                "gridfs.*": {'rename': 'new_gridfs.*', 'gridfs': True}})
 
     def test_rename_validation(self):
         """Test namespace renaming validation."""

@@ -513,14 +513,18 @@ class OplogThread(threading.Thread):
                     # ignore system collections
                     if coll.startswith("system."):
                         continue
-                    # ignore gridfs collections
-                    if coll.endswith(".files") or coll.endswith(".chunks"):
+                    # ignore gridfs chunks collections
+                    if coll.endswith(".chunks"):
                         continue
-                    namespace = "%s.%s" % (database, coll)
-                    if self.namespace_config.gridfs_namespace(namespace):
-                        gridfs_ns_set.append(namespace)
-                    elif self.namespace_config.map_namespace(namespace):
-                        ns_set.append(namespace)
+                    if coll.endswith(".files"):
+                        namespace = "%s.%s" % (database, coll)
+                        namespace = namespace[:-len(".files")]
+                        if self.namespace_config.gridfs_namespace(namespace):
+                            gridfs_ns_set.append(namespace)
+                    else:
+                        namespace = "%s.%s" % (database, coll)
+                        if self.namespace_config.map_namespace(namespace):
+                            ns_set.append(namespace)
             return ns_set, gridfs_ns_set
 
         dump_set, gridfs_dump_set = get_all_ns()
@@ -615,6 +619,10 @@ class OplogThread(threading.Thread):
                 LOG.debug("OplogThread: Using bulk upsert function for "
                           "collection dump")
                 upsert_all(dm)
+
+                if gridfs_dump_set:
+                    LOG.info("OplogThread: dumping GridFS collections: %s",
+                             gridfs_dump_set)
 
                 # Dump GridFS files
                 for gridfs_ns in gridfs_dump_set:
