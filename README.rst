@@ -37,10 +37,15 @@ This will install mongo-connector with the MongoDB Doc Manager suitable for
 replicating data to MongoDB.
 
 Elasticsearch 1.x: ``pip install 'mongo-connector[elastic]'``
+
 Amazon Elasticsearch 1.x Service:  ``pip install 'mongo-connector[elastic-aws]'``
+
 Elasticsearch 2.x: ``pip install 'mongo-connector[elastic2]'``
+
 Amazon Elasticsearch 2.x Service: ``pip install 'mongo-connector[elastic2-aws]'``
+
 Elasticsearch 5.x: ``pip install 'mongo-connector[elastic5]'``
+
 Solr: ``pip install 'mongo-connector[solr]'``
 
 Developement
