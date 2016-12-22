@@ -37,45 +37,35 @@ This will install mongo-connector with the MongoDB Doc Manager suitable for
 replicating data to MongoDB. You can customize the installation depending on
 the target system of your choice:
 
-Elasticsearch 1.x
-^^^^^^^^^^^^^^^^^
-To target an Elasticsearch 1.x server::
+Installation for Elasticsearch 1.x
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  pip install 'mongo-connector[elastic]'
+`pip install 'mongo-connector[elastic]'`
 
-Amazon Elasticsearch 1.x Service
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Installation for Amazon Elasticsearch 1.x Service
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To target an Amazon Elasticsearch 1.x Service::
+`pip install 'mongo-connector[elastic-aws]'`
 
-  pip install 'mongo-connector[elastic-aws]'
+Installation for Elasticsearch 2.x
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Elasticsearch 2.x
-^^^^^^^^^^^^^^^^^
-To target an Elasticsearch 2.x server::
+`pip install 'mongo-connector[elastic2]'`
 
-  pip install 'mongo-connector[elastic2]'
+Installation for Amazon Elasticsearch 2.x Service
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+`pip install 'mongo-connector[elastic2-aws]'`
 
-Amazon Elasticsearch 2.x Service
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Installation for Elasticsearch 5.x
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To target an Amazon Elasticsearch 2.x Service::
+`pip install 'mongo-connector[elastic5]'`
 
-  pip install 'mongo-connector[elastic2-aws]'
+Installation for Solr
+^^^^^^^^^^^^^^^^^^^^^
 
-Elasticsearch 5.x
-^^^^^^^^^^^^^^^^^
-To target an Elasticsearch 5.x server::
-
-  pip install 'mongo-connector[elastic5]'
-
-Solr
-^^^^
-
-To target a Solr server::
-
-  pip install 'mongo-connector[solr]'
+`pip install 'mongo-connector[solr]'`
 
 Developement
 ~~~~~~~~~~~~
