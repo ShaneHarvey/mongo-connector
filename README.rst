@@ -19,34 +19,44 @@ up with operations in MongoDB in real-time. Detailed documentation is
 available on the `wiki
 <https://github.com/mongodb-labs/mongo-connector/wiki>`__.
 
-Installation
-------------
+Getting Started
+---------------
 
 mongo-connector supports Python 2.6, 2.7, and 3.3+ and MongoDB versions
-2.6, 3.0, 3.2, and 3.4. The installation can be customized to install extra
-dependencies or `Doc Managers`_ depending which system you are targeting.
+2.6, 3.0, 3.2, and 3.4.
 
-MongoDB
-~~~~~~~
+Installation
+~~~~~~~~~~~~
 
-For use with MongoDB, install with `pip <https://pypi.python.org/pypi/pip>`__::
+To install mongo-connector with the MongoDB doc manager suitable for
+replicating data to MongoDB, use `pip <https://pypi.python.org/pypi/pip>`__::
 
   pip install mongo-connector
 
-This will install mongo-connector with the MongoDB Doc Manager suitable for
-replicating data to MongoDB.
 
-Elasticsearch 1.x: ``pip install 'mongo-connector[elastic]'``
+The install command can be customized to include the `Doc Managers`_
+and any extra dependencies for the target system.
 
-Amazon Elasticsearch 1.x Service:  ``pip install 'mongo-connector[elastic-aws]'``
++----------------------------------+-------------------------------------------------+
+|         Target System            |            Install Command                      |
++==================================+=================================================+
+| MongoDB                          | ``pip install mongo-connector``                 |
++----------------------------------+-------------------------------------------------+
+| Elasticsearch 1.x                | ``pip install 'mongo-connector[elastic]'``      |
++----------------------------------+-------------------------------------------------+
+| Amazon Elasticsearch 1.x Service | ``pip install 'mongo-connector[elastic-aws]'``  |
++----------------------------------+-------------------------------------------------+
+| Elasticsearch 2.x                | ``pip install 'mongo-connector[elastic2]'``     |
++----------------------------------+-------------------------------------------------+
+| Amazon Elasticsearch 2.x Service | ``pip install 'mongo-connector[elastic2-aws]'`` |
++----------------------------------+-------------------------------------------------+
+| Elasticsearch 5.x                | ``pip install 'mongo-connector[elastic5]'``     |
++----------------------------------+-------------------------------------------------+
+| Solr                             | ``pip install 'mongo-connector[solr]'``         |
++----------------------------------+-------------------------------------------------+
 
-Elasticsearch 2.x: ``pip install 'mongo-connector[elastic2]'``
-
-Amazon Elasticsearch 2.x Service: ``pip install 'mongo-connector[elastic2-aws]'``
-
-Elasticsearch 5.x: ``pip install 'mongo-connector[elastic5]'``
-
-Solr: ``pip install 'mongo-connector[solr]'``
+You may have to run ``pip`` with ``sudo``, depending
+on where you're installing mongo-connector and what privileges you have.
 
 Developement
 ~~~~~~~~~~~~
@@ -56,9 +66,6 @@ manually::
 
   git clone https://github.com/mongodb-labs/mongo-connector.git
   pip install ./mongo-connector
-
-You may have to run ``pip`` with ``sudo``, depending
-on where you're installing mongo-connector and what privileges you have.
 
 Using mongo-connector
 ~~~~~~~~~~~~~~~~~~~~~
