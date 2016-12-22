@@ -22,8 +22,9 @@ available on the `wiki
 Installation
 ------------
 
-mongo-connector supports Python 2.6, 2.7, and 3.3+ and MongoDB versions 2.6, 3.0, 3.2, and 3.4.
-The installation depends on which system you are targeting.
+mongo-connector supports Python 2.6, 2.7, and 3.3+ and MongoDB versions
+2.6, 3.0, 3.2, and 3.4. The installation can be customized to install extra
+dependencies or `Doc Managers`_ depending which system you are targeting.
 
 MongoDB
 ~~~~~~~
@@ -36,35 +37,11 @@ This will install mongo-connector with the MongoDB Doc Manager suitable for
 replicating data to MongoDB.
 
 Elasticsearch 1.x: ``pip install 'mongo-connector[elastic]'``
-
-For use with MongoDB, install with::
-
-`pip install 'mongo-connector[elastic]'`
-
-Installation for Amazon Elasticsearch 1.x Service
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-`pip install 'mongo-connector[elastic-aws]'`
-
-Installation for Elasticsearch 2.x
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-`pip install 'mongo-connector[elastic2]'`
-
-Installation for Amazon Elasticsearch 2.x Service
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-`pip install 'mongo-connector[elastic2-aws]'`
-
-Installation for Elasticsearch 5.x
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-`pip install 'mongo-connector[elastic5]'`
-
-Installation for Solr
-^^^^^^^^^^^^^^^^^^^^^
-
-`pip install 'mongo-connector[solr]'`
+Amazon Elasticsearch 1.x Service:  ``pip install 'mongo-connector[elastic-aws]'``
+Elasticsearch 2.x: ``pip install 'mongo-connector[elastic2]'``
+Amazon Elasticsearch 2.x Service: ``pip install 'mongo-connector[elastic2-aws]'``
+Elasticsearch 5.x: ``pip install 'mongo-connector[elastic5]'``
+Solr: ``pip install 'mongo-connector[solr]'``
 
 Developement
 ~~~~~~~~~~~~
