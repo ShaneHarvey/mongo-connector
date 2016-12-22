@@ -15,30 +15,30 @@ System Overview
 `mongo-connector` creates a pipeline from a MongoDB cluster to one or more
 target systems, such as Solr, Elasticsearch, or another MongoDB cluster.  It
 synchronizes data in MongoDB to the target then tails the MongoDB oplog, keeping
-up with operations in MongoDB in real-time. It is tested with Python 2.6,
-2.7, and 3.3+ and MongoDB versions 2.6, 3.0, 3.2, and 3.4. Detailed
-documentation is available on the `wiki
+up with operations in MongoDB in real-time. Detailed documentation is
+available on the `wiki
 <https://github.com/mongodb-labs/mongo-connector/wiki>`__.
 
-Getting Started
----------------
+Installation
+------------
 
 mongo-connector supports Python 2.6, 2.7, and 3.3+ and MongoDB versions 2.6, 3.0, 3.2, and 3.4.
+The installation depends on which system you are targeting.
 
-Installation for MongoDB
-~~~~~~~~~~~~~~~~~~~~~~~~
+MongoDB
+~~~~~~~
 
-The easiest way to install mongo-connector is with
-`pip <https://pypi.python.org/pypi/pip>`__::
+For use with MongoDB, install with `pip <https://pypi.python.org/pypi/pip>`__::
 
   pip install mongo-connector
 
 This will install mongo-connector with the MongoDB Doc Manager suitable for
-replicating data to MongoDB. You can customize the installation depending on
-the target system of your choice:
+replicating data to MongoDB.
 
-Installation for Elasticsearch 1.x
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Elasticsearch 1.x
+^^^^^^^^^^^^^^^^^
+
+For use with MongoDB, install with::
 
 `pip install 'mongo-connector[elastic]'`
 
