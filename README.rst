@@ -35,8 +35,7 @@ For use with MongoDB, install with `pip <https://pypi.python.org/pypi/pip>`__::
 This will install mongo-connector with the MongoDB Doc Manager suitable for
 replicating data to MongoDB.
 
-Elasticsearch 1.x
-^^^^^^^^^^^^^^^^^
+Elasticsearch 1.x: ``pip install 'mongo-connector[elastic]'``
 
 For use with MongoDB, install with::
 
