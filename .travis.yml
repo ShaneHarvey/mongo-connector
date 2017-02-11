@@ -20,6 +20,7 @@ matrix:
       env: MONGODB=2.4.14
 
 install:
+  - pip install "pymongo>=3.0,<3.1"
   - pip install "mongo-orchestration>=0.6.7,<1.0"
   - wget http://fastdl.mongodb.org/linux/mongodb-linux-x86_64-${MONGODB}.tgz
   - tar zxf mongodb-linux-x86_64-${MONGODB}.tgz

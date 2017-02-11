@@ -124,7 +124,7 @@ setup(name='mongo-connector',
       license="http://www.apache.org/licenses/LICENSE-2.0.html",
       platforms=["any"],
       classifiers=filter(None, classifiers.split("\n")),
-      install_requires=['pymongo == 3.0'],
+      install_requires=['pymongo>=3.0,<3.1'],
       packages=["mongo_connector", "mongo_connector.doc_managers"],
       package_data={
           'mongo_connector.doc_managers': ['schema.xml']
